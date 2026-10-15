@@ -9,6 +9,7 @@
 
   const navigation = [
     { name: 'Tableau de bord', icon: 'heroicons:home', href: '/etablissement/dashboard' },
+    { name: 'Années scolaires', icon: 'heroicons:calendar-days', href: '/etablissement/annees-scolaires' },
     { name: 'Étudiants', icon: 'heroicons:user-group', href: '/etablissement/etudiants' },
     { name: 'Classes', icon: 'heroicons:academic-cap', href: '/etablissement/classes', badge: 'new' },
     { name: 'Matières', icon: 'heroicons:book-open', href: '/etablissement/matieres' },

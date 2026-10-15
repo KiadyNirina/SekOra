@@ -374,6 +374,19 @@ export const authApi = {
         body: JSON.stringify(data),
     }).then(response => response.json()),
 
+    updateAnneeScolaire: (id, data) => fetchWithAuth(`/api/annees-scolaires/${id}/`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+    }).then(response => response.json()),
+
+    deleteAnneeScolaire: (id) => fetchWithAuth(`/api/annees-scolaires/${id}/`, {
+        method: 'DELETE',
+    }).then(() => ({ message: 'Année scolaire supprimée' })),
+
+    activateAnneeScolaire: (id) => fetchWithAuth(`/api/annees-scolaires/${id}/activate/`, {
+        method: 'POST',
+    }).then(response => response.json()),
+
     // Gestion des classes
     getClasses: (filters = {}) => {
         const query = new URLSearchParams(filters).toString();
