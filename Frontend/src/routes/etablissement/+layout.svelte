@@ -1,6 +1,7 @@
 <script>
   import Sidebar from '../../components/etablissement/Sidebar.svelte';
   import Header from '../../components/etablissement/Header.svelte';
+  import SetupBanner from '../../components/etablissement/SetupBanner.svelte';
   import { fade, fly } from 'svelte/transition';
 
   let sidebarOpen = false;
@@ -39,6 +40,7 @@
 
   <div class="flex flex-col flex-1 overflow-hidden">
     <Header onToggleSidebar={() => sidebarOpen = !sidebarOpen} />
+    <SetupBanner />
 
     <main class="flex-1 overflow-y-auto p-4 md:p-6 bg-gray-50">
       <slot />
