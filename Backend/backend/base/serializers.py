@@ -6,6 +6,13 @@ from .models import User, Etablissement, Professeur, Eleve, Parent, AnneeScolair
 from django.utils import timezone
 from django.db.models import Avg
 
+class TimeStampedSerializer(serializers.ModelSerializer):
+    created_at = serializers.DateTimeField(read_only=True)
+    updated_at = serializers.DateTimeField(read_only=True)
+
+    class Meta:
+        fields = ['created_at', 'updated_at']
+        
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         email_or_username = attrs.get('email') or attrs.get('username')
@@ -44,8 +51,8 @@ class AnneeScolaireSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = AnneeScolaire
-        fields = ['id', 'nom', 'date_debut', 'date_fin', 'est_active', 'etablissement']
-        read_only_fields = ['id', 'etablissement']
+        fields = ['id', 'nom', 'date_debut', 'date_fin', 'est_active', 'etablissement', 'created_at', 'updated_at',]
+        read_only_fields = ['id', 'etablissement', 'created_at', 'updated_at']
 
 class ClasseSerializer(serializers.ModelSerializer):
     annee_scolaire = AnneeScolaireSerializer(read_only=True)
@@ -77,7 +84,7 @@ class MatiereSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Matiere
-        fields = ['id', 'nom', 'description', 'etablissement']
+        fields = ['id', 'nom', 'description', 'etablissement', 'created_at', 'updated_at']
 
     def validate(self, data):
         nom = data.get('nom')
@@ -502,7 +509,7 @@ class PeriodeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Periode
-        fields = ['id', 'nom', 'ordre', 'date_debut', 'date_fin', 'annee_scolaire', 'annee_scolaire_id', 'etablissement']
+        fields = ['id', 'nom', 'ordre', 'date_debut', 'date_fin', 'annee_scolaire', 'annee_scolaire_id', 'etablissement', 'created_at', 'updated_at']
         extra_kwargs = {'etablissement': {'read_only': True}}
 
 
@@ -512,8 +519,8 @@ class NoteSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Note
-        fields = ['id', 'evaluation', 'eleve', 'eleve_nom', 'eleve_classe', 'note', 'appreciation', 'absent']
-        read_only_fields = ['id', 'evaluation']
+        fields = ['id', 'evaluation', 'eleve', 'eleve_nom', 'eleve_classe', 'note', 'appreciation', 'absent', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'evaluation', 'created_at', 'updated_at']
 
 
 class EvaluationSerializer(serializers.ModelSerializer):
