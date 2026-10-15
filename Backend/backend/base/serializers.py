@@ -44,8 +44,8 @@ class AnneeScolaireSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = AnneeScolaire
-        fields = ['id', 'nom', 'date_debut', 'date_fin', 'est_active']
-        read_only_fields = ['id']
+        fields = ['id', 'nom', 'date_debut', 'date_fin', 'est_active', 'etablissement']
+        read_only_fields = ['id', 'etablissement']
 
 class ClasseSerializer(serializers.ModelSerializer):
     annee_scolaire = AnneeScolaireSerializer(read_only=True)
@@ -62,15 +62,12 @@ class ClasseSerializer(serializers.ModelSerializer):
     def validate(self, data):
         etablissement = data.get('etablissement')
         annee_scolaire = data.get('annee_scolaire')
-        
-        if self.context['request'].method == 'POST':
-            return data
-            
+
         if etablissement and annee_scolaire:
-            if not etablissement.annees_scolaires.filter(id=annee_scolaire.id).exists():
-                raise serializers.ValidationError(
-                    "Cette année scolaire n'est pas associée à l'établissement"
-                )
+            if annee_scolaire.etablissement_id != etablissement.id:
+                raise serializers.ValidationError({
+                    'annee_scolaire': "Cette année scolaire n'appartient pas à cet établissement"
+                })
         return data
 
 class MatiereSerializer(serializers.ModelSerializer):

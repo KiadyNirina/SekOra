@@ -447,28 +447,55 @@ class EtablissementRegistrationView(generics.CreateAPIView):
         }, status=status.HTTP_201_CREATED)
 
 class AnneeScolaireViewSet(viewsets.ModelViewSet):
-    queryset = AnneeScolaire.objects.all().order_by('-date_debut')
     serializer_class = AnneeScolaireSerializer
     permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        if hasattr(self.request.user, 'etablissement'):
+            return AnneeScolaire.objects.filter(
+                etablissement=self.request.user.etablissement
+            ).order_by('-date_debut')
+        return AnneeScolaire.objects.none()
+
+    def perform_create(self, serializer):
+        if not hasattr(self.request.user, 'etablissement'):
+            raise PermissionError("Seul un établissement peut créer une année scolaire")
+        serializer.save(etablissement=self.request.user.etablissement)
 
     @action(detail=True, methods=['post'])
     def activate(self, request, pk=None):
         annee = self.get_object()
-        # Désactive toutes les autres années
-        AnneeScolaire.objects.exclude(pk=pk).update(est_active=False)
-        # Active l'année sélectionnée
+
+        # Désactive les autres années du MÊME établissement uniquement
+        AnneeScolaire.objects.filter(
+            etablissement=annee.etablissement
+        ).exclude(pk=pk).update(est_active=False)
+
         annee.est_active = True
         annee.save()
+
         return Response({'status': 'année scolaire activée'})
 
     @action(detail=False, methods=['get'])
     def current(self, request):
-        annee_active = AnneeScolaire.objects.filter(est_active=True).first()
+        if not hasattr(request.user, 'etablissement'):
+            return Response(
+                {'detail': 'Utilisateur non établissement'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        annee_active = AnneeScolaire.objects.filter(
+            etablissement=request.user.etablissement,
+            est_active=True
+        ).first()
+
         if not annee_active:
-            return Response({'detail': 'Aucune année scolaire active'}, 
-                          status=status.HTTP_404_NOT_FOUND)
-        serializer = self.get_serializer(annee_active)
-        return Response(serializer.data)
+            return Response(
+                {'detail': 'Aucune année scolaire active'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        return Response(self.get_serializer(annee_active).data)
 
 class ClasseViewSet(viewsets.ModelViewSet):
     serializer_class = ClasseSerializer
@@ -487,26 +514,16 @@ class ClasseViewSet(viewsets.ModelViewSet):
         return context
 
     def perform_create(self, serializer):
-        etablissement = serializer.validated_data['etablissement']
-        annee_scolaire = serializer.validated_data['annee_scolaire']
-        
-        # Crée d'abord l'association
-        etablissement.annees_scolaires.add(annee_scolaire)
-        
-        # Puis sauvegarde la classe
         serializer.save()
-
-        # Met à jour le cache des associations
-        etablissement.refresh_from_db()
 
     def perform_update(self, serializer):
         instance = self.get_object()
         new_annee = serializer.validated_data.get('annee_scolaire', instance.annee_scolaire)
         
         if new_annee != instance.annee_scolaire:
-            if not instance.etablissement.annees_scolaires.filter(id=new_annee.id).exists():
+            if new_annee.etablissement_id != instance.etablissement_id:
                 raise serializers.ValidationError({
-                    'annee_scolaire': "Cette année scolaire n'est pas associée à l'établissement"
+                    'annee_scolaire': "Cette année scolaire n'appartient pas à l'établissement"
                 })
         
         serializer.save()

@@ -35,18 +35,21 @@ class User(AbstractUser):
         super().save(*args, **kwargs)
 
 class AnneeScolaire(models.Model):
-    nom = models.CharField(max_length=50)  # Ex: "2023-2024"
+    etablissement = models.ForeignKey(
+        'Etablissement',
+        on_delete=models.CASCADE,
+        related_name='annees_scolaires',
+    )
+    nom = models.CharField(max_length=50)
     date_debut = models.DateField()
     date_fin = models.DateField()
     est_active = models.BooleanField(default=False)
-    
-    def __str__(self):
-        return self.nom
 
     class Meta:
         ordering = ['-date_debut']
         verbose_name = "Année scolaire"
         verbose_name_plural = "Années scolaires"
+        unique_together = ('etablissement', 'nom')
 
 class Etablissement(models.Model):
     TYPE_CHOICES = (
@@ -86,7 +89,6 @@ class Etablissement(models.Model):
         blank=True,
         help_text="Date de dernière mise à jour des coordonnées"
     )
-    annees_scolaires = models.ManyToManyField(AnneeScolaire, blank=True)
     
     def __str__(self):
         return self.nom
