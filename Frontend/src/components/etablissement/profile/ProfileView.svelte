@@ -348,7 +348,7 @@
   }
 </script>
 
-<div class="max-w-7xl mx-auto">
+<div class="mx-auto">
   <!-- En-tête -->
   <div class="mb-6">
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
