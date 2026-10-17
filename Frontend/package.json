@@ -22,6 +22,7 @@
 		"fullcalendar": "^6.1.18",
 		"html2pdf.js": "^0.10.3",
 		"leaflet": "^1.9.4",
+		"leaflet.markercluster": "^1.5.3",
 		"skeleton-elements": "^4.0.1",
 		"svelte-calendars": "^0.6.0",
 		"svelte-fullcalendar": "^3.0.0",

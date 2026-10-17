@@ -2,6 +2,8 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .views import *
+from django.conf import settings
+from django.conf.urls.static import static
 
 router = DefaultRouter()
 router.register(r'annees-scolaires', AnneeScolaireViewSet, basename='anneescolaire')
@@ -29,4 +31,12 @@ urlpatterns = [
     path('api/', include(router.urls)),
     path('api/geocode/', geocode_proxy, name='geocode-proxy'),
     path('api/reverse-geocode/', reverse_geocode_proxy, name='reverse-geocode-proxy'),
+    path('api/nearby/', nearby_schools_proxy, name='nearby-schools'),
+    path('admin/import-osm/', ImportOSMSchoolsView.as_view(), name='import-osm-schools'),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(
+        settings.MEDIA_URL,
+        document_root=settings.MEDIA_ROOT
+    )

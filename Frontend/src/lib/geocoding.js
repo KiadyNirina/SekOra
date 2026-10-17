@@ -1,7 +1,9 @@
 // Export par défaut pour le service principal
+let baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
 export default class GeocodingService {
-    static PROXY_URL = 'http://localhost:8000/school/api/geocode/';
-    static REVERSE_PROXY_URL = 'http://localhost:8000/school/api/reverse-geocode/';
+    static PROXY_URL = `${baseUrl}/school/api/geocode/`;
+    static REVERSE_PROXY_URL = `${baseUrl}/school/api/reverse-geocode/`;
     static USER_AGENT = 'VotreApplication/1.0';
 
     static async geocode(address, options = {}) {

@@ -2,9 +2,17 @@
 <script>
   import { onMount, tick } from 'svelte';
   import { calculateDistance, formatDistance } from './mapUtils';
+  import { browser } from '$app/environment';
+  import { createEventDispatcher } from 'svelte';
+  import 'leaflet.markercluster/dist/MarkerCluster.css';
+  import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
+
+  const dispatch = createEventDispatcher();
 
   export let establishments = [];
   export let userLocation = null;
+
+  let markerClusterGroup = null;
 
   let map = null;
   let L = null;
@@ -30,29 +38,58 @@
 
   // Expose les méthodes au parent via bind:this
   export function selectEstablishment(id) {
-    if (!mapInitialized || !L) return;
-    const establishment = establishments.find(e => e.id === id);
+    if (!mapInitialized || !L || !map) return;
+
+    const establishment = establishments.find(e => String(e.id) === String(id));
     if (!establishment || !establishment.lat || !establishment.lng) return;
-    map.setView([establishment.lat, establishment.lng], 16);
-    markers.forEach(marker => {
-      const latLng = marker.getLatLng();
-      if (latLng.lat === establishment.lat && latLng.lng === establishment.lng) {
-        marker.openPopup();
-      }
+
+    // 1. Zoom sur l'école
+    map.setView([establishment.lat, establishment.lng], 16, {
+      animate: true,
+      duration: 0.8
     });
+
+    // 2. Chercher le marker par id (au lieu de comparer les coordonnées)
+    const target = markers.find(m => m.ebossId === String(id));
+    if (!target) return;
+
+    // 3. Attendre que la carte finisse de zoomer, puis casser le cluster + ouvrir
+    setTimeout(() => {
+      if (!map) return;
+
+      // Sortir le marqueur de son cluster (si besoin) en zoomant sur lui
+      if (markerClusterGroup && markerClusterGroup.hasLayer(target)) {
+        markerClusterGroup.zoomToShowLayer(target, () => {
+          target.openPopup();
+        });
+      } else {
+        target.openPopup();
+      }
+    }, 900); // après l'animation de zoom (duration: 0.8s = 800ms)
   }
 
   export function goToEstablishment(id) {
-    if (!mapInitialized || !L) return;
-    const establishment = establishments.find(e => e.id === id);
+    if (!mapInitialized || !L || !map) return;
+    const establishment = establishments.find(e => String(e.id) === String(id));
     if (!establishment || !establishment.lat || !establishment.lng) return;
-    map.setView([establishment.lat, establishment.lng], 15, { animate: true, duration: 1 });
-    markers.forEach(marker => {
-      const latLng = marker.getLatLng();
-      if (latLng.lat === establishment.lat && latLng.lng === establishment.lng) {
-        setTimeout(() => marker.openPopup(), 500);
-      }
+
+    map.setView([establishment.lat, establishment.lng], 15, {
+      animate: true,
+      duration: 1
     });
+
+    const target = markers.find(m => m.ebossId === String(id));
+    if (!target) return;
+
+    setTimeout(() => {
+      if (markerClusterGroup && markerClusterGroup.hasLayer(target)) {
+        markerClusterGroup.zoomToShowLayer(target, () => {
+          target.openPopup();
+        });
+      } else {
+        target.openPopup();
+      }
+    }, 1000);
   }
 
   export function goToUserLocation() {
@@ -64,11 +101,32 @@
   }
 
   // Met à jour les marqueurs quand les données ou la position changent
-  $: if (mapInitialized) {
-    void establishments;
-    void userLocation;
-    addEstablishmentMarkers(establishments, userLocation);
-    updateEdgeMarkers(establishments, userLocation);
+  // Suivi manuel — pas de boucle réactive
+  let prevEstablishmentsRef = null;
+  let prevUserLocationRef = null;
+  let updateScheduled = false;
+
+  $: {
+    if (mapInitialized) {
+      const estChanged = establishments !== prevEstablishmentsRef;
+      const locChanged =
+        (userLocation?.lat !== prevUserLocationRef?.lat) ||
+        (userLocation?.lng !== prevUserLocationRef?.lng);
+
+      if ((estChanged || locChanged) && !updateScheduled) {
+        prevEstablishmentsRef = establishments;
+        prevUserLocationRef = userLocation;
+        updateScheduled = true;
+
+        // Sortir du cycle réactif pour éviter la boucle
+        Promise.resolve().then(() => {
+          updateScheduled = false;
+          if (!mapInitialized) return;
+          addEstablishmentMarkers(establishments, userLocation);
+          updateEdgeMarkers(establishments, userLocation);
+        });
+      }
+    }
   }
 
   onMount(async () => {
@@ -79,6 +137,10 @@
         updateEdgeMarkers(establishments, userLocation);
       }, 300);
     }
+    if (browser) {
+      window.addEventListener('map-deselect', () => {
+      });
+    }
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   });
@@ -86,16 +148,27 @@
   function handleResize() {
     if (map) {
       map.invalidateSize();
-      updateEdgeMarkers();
       updateEdgeMarkers(establishments, userLocation);
     }
   }
 
   async function initMap() {
     if (mapInitialized) return;
+    
     const leaflet = await import('leaflet');
     L = leaflet.default;
     await import('leaflet/dist/leaflet.css');
+
+    // Charge markercluster en lui passant L explicitement
+    if (browser) {
+      await import('leaflet.markercluster');
+      // Si le plugin ne s'attache pas automatiquement, force-le :
+      if (typeof L.markerClusterGroup !== 'function') {
+        // Fallback : charge le plugin via le global window.L
+        window.L = L;
+        await import('leaflet.markercluster');
+      }
+    }
 
     delete L.Icon.Default.prototype._getIconUrl;
     L.Icon.Default.mergeOptions({
@@ -117,6 +190,14 @@
       maxZoom: 19
     }).addTo(map);
 
+    markerClusterGroup = L.markerClusterGroup({
+      maxClusterRadius: 50,
+      spiderfyOnMaxZoom: true,
+      showCoverageOnHover: false,
+      zoomToBoundsOnClick: true,
+    });
+    map.addLayer(markerClusterGroup);
+
     mapInitialized = true;
     addLegend();
     setupMapEvents();
@@ -126,14 +207,17 @@
 
   function addEstablishmentMarkers(establishmentsList, userLocation) {
     if (!mapInitialized || !L) return;
-    markers.forEach(marker => map.removeLayer(marker));
+    if (!Array.isArray(establishmentsList)) return;
+    if (!markerClusterGroup) return;
+    markerClusterGroup.clearLayers();
     markers = [];
 
     establishmentsList.forEach((establishment, index) => {
       if (!establishment.lat || !establishment.lng) return;
 
-      const color = typeColors[establishment.type] || '#6b7280';
-      const typeLabel = typeLabels[establishment.type] || establishment.type;
+      const isGoogle = establishment.source === 'osm';
+      const color = isGoogle ? '#9ca3af' : (typeColors[establishment.type] || '#6b7280');
+      const typeLabel = isGoogle ? 'École (Google)' : (typeLabels[establishment.type] || establishment.type);
       const delay = index * 0.2;
       const distance = establishment.distance || getEstablishmentDistance(establishment, userLocation);
       const distanceText = distance !== null ? formatDistance(distance) : 'Distance non disponible';
@@ -167,7 +251,7 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.2);
             z-index: 10; pointer-events: none;
             border: 1px solid rgba(255,255,255,0.2);
-          ">📏 ${distanceText}</div>
+          ">${distanceText} de vous</div>
         `;
       }
 
@@ -183,25 +267,36 @@
 
       const tooltipContent = `
         <div class="distance-tooltip">
-          <div class="font-bold text-[#20784d]">${establishment.name}</div>
-          <div class="text-sm text-gray-600">📍 ${establishment.address}</div>
+          <div class="font-bold ${isGoogle ? 'text-gray-700' : 'text-[#20784d]'}">${establishment.name}</div>
+          <div class="text-sm ${establishment.address ? 'text-gray-600' : 'text-gray-400 italic'}">
+          📍 ${establishment.address || 'Adresse non renseignée'}
+        </div>
           ${distance !== null ? `
             <div class="flex items-center gap-1 mt-1 text-sm">
-              <span class="text-gray-500">📏 Distance:</span>
-              <span class="font-semibold text-[#20784d]">${distanceText}</span>
-              <span class="text-gray-400 text-xs">de vous</span>
+              <span class="text-gray-500">📍 À</span>
+              <span class="font-semibold ${isGoogle ? 'text-gray-700' : 'text-[#20784d]'}">${distanceText}</span>
+              <span class="text-gray-500">de votre position</span>
             </div>
           ` : `
-            <div class="text-xs text-gray-400 mt-1">📍 Localisez-vous pour voir la distance</div>
+            <div class="text-xs text-gray-400 mt-1">📍 Activez la géolocalisation pour voir la distance</div>
           `}
-          <div class="text-xs text-gray-400 mt-1">🏫 ${typeLabel}</div>
+          <div class="text-xs ${isGoogle ? 'text-gray-400' : 'text-gray-400'} mt-1">
+            ${isGoogle ? '🌐 Source : Google' : '🏫 ' + typeLabel}
+          </div>
         </div>
       `;
 
       const marker = L.marker([establishment.lat, establishment.lng], {
         icon: customIcon,
         riseOnHover: true
-      }).addTo(map);
+      });
+      marker.ebossId = String(establishment.id);  // ← stocke l'id
+      marker.ebossData = establishment;            // ← stocke l'objet complet
+      markerClusterGroup.addLayer(marker);
+
+      marker.on('click', () => {
+        lastMarkerClickTime = Date.now();
+      });
 
       marker.bindTooltip(tooltipContent, {
         permanent: false,
@@ -212,32 +307,67 @@
         interactive: true
       });
 
-      marker.bindPopup(`
-        <div class="p-2 max-w-xs">
-          <h3 class="font-bold text-[#20784d] text-lg">${establishment.name}</h3>
-          <p class="text-sm text-gray-600 mt-1">📍 ${establishment.address}</p>
-          <p class="text-sm text-gray-600">🏫 ${typeLabel}</p>
-          <p class="text-sm text-gray-600">📞 ${establishment.phone}</p>
-          <p class="text-sm text-gray-600">✉️ ${establishment.email}</p>
-          ${distance !== null ? `
-            <div class="mt-2 p-2 bg-green-50 rounded-md border border-green-200">
-              <p class="text-sm font-medium text-[#20784d]">📏 Distance: ${distanceText}</p>
+      if (isGoogle) {
+        // École Google → popup simplifiée + lien Google Maps
+        marker.bindPopup(`
+          <div class="p-3 max-w-xs">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-medium">Google</span>
             </div>
-          ` : `
-            <div class="mt-2 p-2 bg-gray-50 rounded-md border border-gray-200">
-              <p class="text-sm text-gray-500">📏 Activez la géolocalisation pour voir la distance</p>
+            <h3 class="font-bold text-gray-800 text-base">${establishment.name}</h3>
+            <p class="text-sm mt-1 ${establishment.address ? 'text-gray-600' : 'text-gray-400 italic'}">
+              📍 ${establishment.address || 'Adresse non renseignée'}
+            </p>
+            ${establishment.rating ? `
+              <p class="text-sm text-gray-600 mt-1">⭐ ${establishment.rating} (${establishment.user_ratings_total || 0} avis)</p>
+            ` : ''}
+            ${distance !== null ? `
+              <div class="mt-2 p-2 bg-gray-50 rounded-md border border-gray-200">
+                <p class="text-sm font-medium text-gray-700">📍 À ${distanceText} de votre position</p>
+              </div>
+            ` : ''}
+            <a href="https://www.google.com/maps/place/?q=place_id:${establishment.id}"
+              target="_blank"
+              rel="noopener"
+              class="mt-3 block w-full text-center bg-white border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors shadow-sm">
+              Voir sur Google Maps →
+            </a>
+          </div>
+        `);
+      } else {
+        // Établissement inscrit → popup complète
+        marker.bindPopup(`
+          <div class="p-2 max-w-xs">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="text-[10px] bg-[#20784d]/10 text-[#20784d] px-2 py-0.5 rounded-full font-medium">Inscrit</span>
             </div>
-          `}
-          <button onclick="window.openProfilePanel(${establishment.id})"
-                  class="mt-2 w-full bg-white border border-[#20784d] text-[#20784d] px-3 py-2 rounded-lg text-sm font-medium hover:bg-green-50 transition-colors shadow-sm">
-            Voir le profil
-          </button>
-          <button onclick="window.selectEstablishment(${establishment.id})"
-                  class="mt-3 w-full bg-[#20784d] text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors shadow-sm">
-            Voir détails
-          </button>
-        </div>
-      `);
+            <h3 class="font-bold text-[#20784d] text-lg">${establishment.name}</h3>
+            <p class="text-sm mt-1 ${establishment.address ? 'text-gray-600' : 'text-gray-400 italic'}">
+              📍 ${establishment.address || 'Adresse non renseignée'}
+            </p>
+            <p class="text-sm text-gray-600">🏫 ${typeLabel}</p>
+            <p class="text-sm text-gray-600">📞 ${establishment.phone}</p>
+            <p class="text-sm text-gray-600">✉️ ${establishment.email}</p>
+            ${distance !== null ? `
+              <div class="mt-2 p-2 bg-green-50 rounded-md border border-green-200">
+                <p class="text-sm font-medium text-[#20784d]">📍 À ${distanceText} de votre position</p>
+              </div>
+            ` : `
+              <div class="mt-2 p-2 bg-gray-50 rounded-md border border-gray-200">
+                <p class="text-sm text-gray-500">📍 Activez la géolocalisation pour voir la distance</p>
+              </div>
+            `}
+            <button onclick="window.openProfilePanel(${establishment.id})"
+                    class="mt-2 w-full bg-white border border-[#20784d] text-[#20784d] px-3 py-2 rounded-lg text-sm font-medium hover:bg-green-50 transition-colors shadow-sm">
+              Voir le profil
+            </button>
+            <button onclick="window.selectEstablishment(${establishment.id})"
+                    class="mt-3 w-full bg-[#20784d] text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors shadow-sm">
+              Voir détails
+            </button>
+          </div>
+        `);
+      }
 
       markers.push(marker);
     });
@@ -256,6 +386,8 @@
 
   function updateEdgeMarkers(establishmentsList, userLocation) {
     if (!mapInitialized || !L) return;
+    if (!Array.isArray(establishmentsList)) return;
+    if (!markers || markers.length === 0) return; 
     edgeMarkers.forEach(marker => map.removeLayer(marker));
     edgeMarkers = [];
     if (userEdgeMarker) {
@@ -299,12 +431,12 @@
             <div class="font-bold text-[#20784d]">${establishmentName}</div>
             ${distance !== null ? `
               <div class="flex items-center gap-1 mt-1 text-sm">
-                <span class="text-gray-500">📏 Distance:</span>
+                <span class="text-gray-500">📍 À</span>
                 <span class="font-semibold text-[#20784d]">${distanceText}</span>
-                <span class="text-gray-400 text-xs">de vous</span>
+                <span class="text-gray-500">de votre position</span>
               </div>
             ` : `
-              <div class="text-xs text-gray-400 mt-1">📍 Localisez-vous pour voir la distance</div>
+              <div class="text-xs text-gray-400 mt-1">📍 Activez la géolocalisation pour voir la distance</div>
             `}
             <div class="text-xs text-gray-400 mt-1">#${index + 1} - Cliquez pour voir</div>
           </div>
@@ -342,7 +474,7 @@
               box-shadow: 0 2px 4px rgba(0,0,0,0.2);
               z-index: 10; pointer-events: none;
               border: 1px solid rgba(255,255,255,0.2);
-            ">📏 ${distanceText}</div>
+            ">📍 ${distanceText}</div>
           `;
         }
 
@@ -524,10 +656,27 @@
     `);
   }
 
-  $: if (mapInitialized && userLocation) {
-    addUserLocationMarker();
-    // Recentrer éventuellement
-    if (map) map.setView([userLocation.lat, userLocation.lng], 14);
+  let prevUserMarkerLoc = null;
+  let userMarkerScheduled = false;
+
+  $: {
+    if (mapInitialized && userLocation && !userMarkerScheduled) {
+      const changed =
+        userLocation.lat !== prevUserMarkerLoc?.lat ||
+        userLocation.lng !== prevUserMarkerLoc?.lng;
+
+      if (changed) {
+        prevUserMarkerLoc = userLocation;
+        userMarkerScheduled = true;
+
+        Promise.resolve().then(() => {
+          userMarkerScheduled = false;
+          if (!mapInitialized) return;
+          addUserLocationMarker();
+          if (map) map.setView([userLocation.lat, userLocation.lng], 14);
+        });
+      }
+    }
   }
 
   function addLegend() {
@@ -547,6 +696,16 @@
           <div class="flex items-center"><span class="inline-block w-3 h-3 rounded-full bg-purple-500 mr-3 shadow-sm"></span><span class="text-gray-600">Université</span></div>
         </div>
         <div class="mt-3 pt-3 border-t border-gray-100 space-y-2">
+          <div class="flex items-center">
+            <span class="inline-block w-3 h-3 rounded-full bg-[#20784d] mr-3 shadow-sm"></span>
+            <span class="text-xs text-gray-600">Inscrit sur la plateforme</span>
+          </div>
+          <div class="flex items-center">
+            <span class="inline-block w-3 h-3 rounded-full bg-gray-400 mr-3 shadow-sm"></span>
+            <span class="text-xs text-gray-600">Trouvé via Google</span>
+          </div>
+        </div>
+        <div class="mt-3 pt-3 border-t border-gray-100 space-y-2">
           <div class="flex items-center justify-between group">
             <div class="flex items-center">
               <div class="w-3 h-3 rounded-full bg-[#20784d] mr-3 ring-4 ring-[#20784d]/20 animate-pulse"></div>
@@ -564,10 +723,17 @@
     legend.addTo(map);
   }
 
+  let lastMarkerClickTime = 0;
+
   function setupMapEvents() {
     if (!mapInitialized) return;
     map.on('moveend', () => updateEdgeMarkers(establishments, userLocation));
     map.on('zoomend', () => updateEdgeMarkers(establishments, userLocation));
+    map.on('click', () => {
+      // Si un marqueur a été cliqué récemment (popup ouvert), on ignore le clic sur la carte
+      if (Date.now() - lastMarkerClickTime < 200) return;
+      dispatch('deselect');
+    });
   }
 </script>
 
@@ -633,7 +799,7 @@
     width: 50px;
     height: 50px;
     border-radius: 50%;
-    background: rgba(32, 120, 77, 0.15);
+    background: rgba(59, 130, 246, 0.15);
     animation: pulseRing 2s ease-in-out infinite;
   }
 
@@ -645,7 +811,7 @@
     width: 35px;
     height: 35px;
     border-radius: 50%;
-    background: rgba(32, 120, 77, 0.25);
+    background: rgba(59, 130, 246, 0.25);
     animation: pulseRing 2s ease-in-out 0.6s infinite;
   }
 
@@ -656,10 +822,10 @@
     transform: translate(-50%, -50%);
     width: 26px;
     height: 26px;
-    background: #20784d;
+    background: #3b82f6;
     border-radius: 50%;
     border: 3px solid white;
-    box-shadow: 0 0 0 3px rgba(32, 120, 77, 0.3), 0 4px 12px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3), 0 4px 12px rgba(0, 0, 0, 0.2);
     animation: popIn 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
     z-index: 2;
   }
@@ -681,9 +847,10 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     color: white;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
     pointer-events: none;
     z-index: 3;
     animation: popIn 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55);

@@ -3,7 +3,7 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.decorators import action
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import SAFE_METHODS, AllowAny, IsAuthenticated
+from rest_framework.permissions import SAFE_METHODS, AllowAny, IsAuthenticated, IsAdminUser
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -12,6 +12,7 @@ from django.http import HttpResponse, JsonResponse
 from django.db.models import Q, F, Value, ExpressionWrapper, FloatField
 from django.db.models.functions import ACos, Cos, Radians, Sin
 from django.utils import timezone
+from django.core.management import call_command
 from .serializers import (
     CustomTokenObtainPairSerializer,
     EtablissementSerializer, 
@@ -33,6 +34,15 @@ from .models import *
 from django.views.decorators.csrf import csrf_exempt
 import requests
 import json
+import time
+from django.conf import settings
+import socket
+import urllib3.util.connection as urllib3_cn
+
+def _allowed_gai_family():
+    return socket.AF_INET
+
+urllib3_cn.allowed_gai_family = _allowed_gai_family
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
@@ -121,6 +131,42 @@ def reverse_geocode_proxy(request):
     
     return JsonResponse({'error': 'Method not allowed'}, status=405)
 
+@csrf_exempt
+def nearby_schools_proxy(request):
+    """
+    Retourne TOUTES les écoles OSM depuis la BDD locale.
+    Le filtrage par distance est fait côté frontend (si besoin).
+    """
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    TYPE_MAPPING = {
+        'school': 'ecole',
+        'college': 'college',
+        'lycee': 'lycee',
+        'university': 'universite',
+        'kindergarten': 'ecole',
+    }
+
+    qs = EcoleOSM.objects.all().order_by('nom')
+
+    schools = []
+    for e in qs:
+        schools.append({
+            'id': e.osm_id,
+            'name': e.nom or 'École sans nom',
+            'address': e.adresse or None,
+            'lat': e.latitude,
+            'lng': e.longitude,
+            'type': TYPE_MAPPING.get(e.type_ecole, 'ecole'),
+            'source': 'osm',
+        })
+
+    return JsonResponse({
+        'count': len(schools),
+        'results': schools,
+    })
+    
 class EtablissementViewSet(viewsets.ModelViewSet):
     """
     ViewSet pour gérer les établissements avec géolocalisation
@@ -401,28 +447,55 @@ class EtablissementRegistrationView(generics.CreateAPIView):
         }, status=status.HTTP_201_CREATED)
 
 class AnneeScolaireViewSet(viewsets.ModelViewSet):
-    queryset = AnneeScolaire.objects.all().order_by('-date_debut')
     serializer_class = AnneeScolaireSerializer
     permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        if hasattr(self.request.user, 'etablissement'):
+            return AnneeScolaire.objects.filter(
+                etablissement=self.request.user.etablissement
+            ).order_by('-date_debut')
+        return AnneeScolaire.objects.none()
+
+    def perform_create(self, serializer):
+        if not hasattr(self.request.user, 'etablissement'):
+            raise PermissionError("Seul un établissement peut créer une année scolaire")
+        serializer.save(etablissement=self.request.user.etablissement)
 
     @action(detail=True, methods=['post'])
     def activate(self, request, pk=None):
         annee = self.get_object()
-        # Désactive toutes les autres années
-        AnneeScolaire.objects.exclude(pk=pk).update(est_active=False)
-        # Active l'année sélectionnée
+
+        # Désactive les autres années du MÊME établissement uniquement
+        AnneeScolaire.objects.filter(
+            etablissement=annee.etablissement
+        ).exclude(pk=pk).update(est_active=False)
+
         annee.est_active = True
         annee.save()
+
         return Response({'status': 'année scolaire activée'})
 
     @action(detail=False, methods=['get'])
     def current(self, request):
-        annee_active = AnneeScolaire.objects.filter(est_active=True).first()
+        if not hasattr(request.user, 'etablissement'):
+            return Response(
+                {'detail': 'Utilisateur non établissement'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        annee_active = AnneeScolaire.objects.filter(
+            etablissement=request.user.etablissement,
+            est_active=True
+        ).first()
+
         if not annee_active:
-            return Response({'detail': 'Aucune année scolaire active'}, 
-                          status=status.HTTP_404_NOT_FOUND)
-        serializer = self.get_serializer(annee_active)
-        return Response(serializer.data)
+            return Response(
+                {'detail': 'Aucune année scolaire active'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        return Response(self.get_serializer(annee_active).data)
 
 class ClasseViewSet(viewsets.ModelViewSet):
     serializer_class = ClasseSerializer
@@ -441,26 +514,16 @@ class ClasseViewSet(viewsets.ModelViewSet):
         return context
 
     def perform_create(self, serializer):
-        etablissement = serializer.validated_data['etablissement']
-        annee_scolaire = serializer.validated_data['annee_scolaire']
-        
-        # Crée d'abord l'association
-        etablissement.annees_scolaires.add(annee_scolaire)
-        
-        # Puis sauvegarde la classe
         serializer.save()
-
-        # Met à jour le cache des associations
-        etablissement.refresh_from_db()
 
     def perform_update(self, serializer):
         instance = self.get_object()
         new_annee = serializer.validated_data.get('annee_scolaire', instance.annee_scolaire)
         
         if new_annee != instance.annee_scolaire:
-            if not instance.etablissement.annees_scolaires.filter(id=new_annee.id).exists():
+            if new_annee.etablissement_id != instance.etablissement_id:
                 raise serializers.ValidationError({
-                    'annee_scolaire': "Cette année scolaire n'est pas associée à l'établissement"
+                    'annee_scolaire': "Cette année scolaire n'appartient pas à l'établissement"
                 })
         
         serializer.save()
@@ -971,3 +1034,31 @@ class UserProfileView(APIView):
     def get(self, request):
         serializer = UserProfileSerializer(request.user)
         return Response(serializer.data)
+    
+class ImportOSMSchoolsView(APIView):
+    """
+    Lance manuellement l'import des écoles depuis OpenStreetMap.
+    Accessible uniquement aux utilisateurs administrateurs.
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def post(self, request):
+        try:
+            call_command(
+                'import_osm_schools',
+                lat=-18.92018507,
+                lng=47.53656268,
+                radius=5000
+            )
+
+            return Response({
+                'success': True,
+                'message': 'Import OSM terminé.'
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

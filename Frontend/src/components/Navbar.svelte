@@ -18,12 +18,9 @@
       
       <div class="hidden md:flex items-center space-x-8">
         <a href="#features" class="text-gray-700 hover:text-[#20784d] px-3 py-2 text-base font-medium">Fonctionnalités</a>
-        <!-- <a href="#pricing" class="text-gray-700 hover:text-[#20784d] px-3 py-2 text-base font-medium">Tarifs</a>
-        <a href="#testimonials" class="text-gray-700 hover:text-[#20784d] px-3 py-2 text-base font-medium">Témoignages</a> -->
       </div>
       
       <div class="hidden md:flex items-center space-x-4">
-        <!-- Icône Recherche -->
         <button 
           on:click={() => goto('/map')}
           class="flex items-center gap-2 bg-green-50 text-[#20784d] hover:cursor-pointer px-4 py-2 rounded-full text-base font-medium transition-all duration-200 border border-green-200 hover:border-green-600"
@@ -37,7 +34,11 @@
       </div>
       
       <div class="md:hidden flex items-center">
-        <button on:click={() => menuOpen = !menuOpen} class="text-gray-500 hover:text-gray-900 focus:outline-none">
+        <button 
+          on:click={() => menuOpen = !menuOpen} 
+          class="p-2 rounded-lg text-gray-500 hover:text-[#20784d] hover:bg-green-50 transition-colors focus:outline-none"
+          aria-label="Menu"
+        >
           <Icon icon={menuOpen ? 'heroicons-outline:x' : 'heroicons-outline:menu'} class="h-6 w-6" />
         </button>
       </div>
@@ -45,19 +46,35 @@
   </div>
   
   {#if menuOpen}
-    <div transition:fade class="md:hidden bg-white shadow-lg">
-      <div class="px-2 pt-2 pb-3 space-y-1 sm:px-3">
-        <a href="#features" class="block px-3 py-2 text-base font-medium text-gray-700 hover:text-[#20784d] hover:bg-gray-50">Fonctionnalités</a>
-        <!-- <a href="#pricing" class="block px-3 py-2 text-base font-medium text-gray-700 hover:text-[#20784d] hover:bg-gray-50">Tarifs</a>
-        <a href="#testimonials" class="block px-3 py-2 text-base font-medium text-gray-700 hover:text-[#20784d] hover:bg-gray-50">Témoignages</a> -->
-        <a href="/map" class="block px-3 py-2 text-base font-medium text-gray-700 hover:text-[#20784d] hover:bg-gray-50">
-          <Icon icon="heroicons:magnifying-glass" class="inline h-5 w-5 mr-2" />
+    <div transition:fade class="md:hidden bg-white border-t border-gray-100 shadow-lg">
+      <div class="px-4 pt-3 pb-4 space-y-1">
+        <a 
+          href="#features" 
+          class="flex items-center gap-3 px-3 py-3 text-base font-medium text-gray-700 rounded-lg hover:text-[#20784d] hover:bg-green-50 transition-colors"
+          on:click={() => menuOpen = false}
+        >
+          <Icon icon="heroicons-outline:sparkles" class="h-5 w-5 text-[#20784d]" />
+          Fonctionnalités
+        </a>
+        
+        <a 
+          href="/map" 
+          class="flex items-center gap-3 px-3 py-3 text-base font-medium text-gray-700 rounded-lg hover:text-[#20784d] hover:bg-green-50 transition-colors"
+          on:click={() => menuOpen = false}
+        >
+          <Icon icon="heroicons:magnifying-glass" class="h-5 w-5 text-[#20784d]" />
           Rechercher des établissements
         </a>
         
-        <div class="border-t border-gray-200 pt-4 pb-3">
-          <a href="/login" class="block px-3 py-2 text-base font-medium text-gray-700 hover:text-[#20784d]">Connexion</a>
-          <a href="/signup" class="mt-2 block w-full px-3 py-2 text-center text-base font-medium text-white bg-[#20784d] rounded-md hover:bg-green-700">Essai gratuit</a>
+        <div class="pt-3 mt-2 border-t border-gray-100 space-y-2">
+          <a 
+            href="/login" 
+            class="flex items-center justify-center gap-3 w-full px-4 py-3 text-base font-medium text-[#20784d] bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors"
+            on:click={() => menuOpen = false}
+          >
+            <Icon icon="heroicons-outline:login" class="h-5 w-5" />
+            Connexion
+          </a>
         </div>
       </div>
     </div>

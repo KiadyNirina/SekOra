@@ -9,6 +9,7 @@
   let rememberMe = false;
   let isLoading = false;
   let errorMessage = '';
+  let showPassword = false;
   
   const userTypes = [
     { id: 'etablissement', label: 'Établissement', icon: 'heroicons:building-office-2' },
@@ -58,7 +59,22 @@
           break;
       }
     } catch (err) {
-      errorMessage = err.message || 'Erreur de connexion';
+      if (err?.response?.data) {
+        const data = err.response.data;
+
+        if (data.non_field_errors) {
+          errorMessage = Array.isArray(data.non_field_errors)
+            ? data.non_field_errors[0]
+            : data.non_field_errors;
+        } else if (data.detail) {
+          errorMessage = data.detail;
+        } else {
+          errorMessage = 'Erreur de connexion';
+        }
+      } else {
+        errorMessage = err?.message || 'Erreur de connexion';
+      }
+
       authStore.clearTokens();
     } finally {
       isLoading = false;
@@ -79,8 +95,8 @@
     </p>
   </div>
 
-  <div class="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-    <div class="bg-white py-8 px-4 border border-gray-200 sm:rounded-[10%] sm:px-10">
+  <div class="mt-8 mx-auto w-full max-w-md">
+    <div class="bg-white py-8 px-4 border border-gray-200 rounded-[10%] px-10">
       <!-- Sélecteur de type d'utilisateur -->
       <div class="mb-6">
         <div class="flex space-x-0 overflow-x-auto pb-2">
@@ -132,16 +148,27 @@
           <label for="password" class="block text-sm font-medium text-gray-700">
             Mot de passe
           </label>
-          <div class="mt-1">
+          <div class="mt-1 relative">
             <input
               id="password"
               name="password"
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               autocomplete="current-password"
               bind:value={password}
               required
-              class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-full placeholder-gray-400 focus:outline-none focus:ring-[#20784d] focus:border-[#20784d] sm:text-sm"
+              class="appearance-none block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-full placeholder-gray-400 focus:outline-none focus:ring-[#20784d] focus:border-[#20784d] sm:text-sm"
             />
+            <button
+              type="button"
+              on:click={() => showPassword = !showPassword}
+              class="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-[#20784d] focus:outline-none"
+              aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+            >
+              <Icon
+                icon={showPassword ? 'heroicons:eye-slash' : 'heroicons:eye'}
+                class="h-5 w-5"
+              />
+            </button>
           </div>
         </div>
 

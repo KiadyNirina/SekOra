@@ -3,7 +3,8 @@ import { get } from "svelte/store";
 
 // Synchroniser les modifications des stores avec localStorage
 
-const API_URL = 'http://localhost:8000/school/schoolLogin';
+let baseUrl = import.meta.env.VITE_API_BASE_URL;
+const API_URL = baseUrl+'/school/schoolLogin';
 
 export async function login(email, password) {
     try{

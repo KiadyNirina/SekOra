@@ -1,0 +1,45 @@
+services:
+
+  backend:
+    build: .
+    container_name: eboss_backend
+    command: python manage.py runserver 0.0.0.0:8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+
+  db:
+    image: mysql:8.0
+    container_name: eboss_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: eboss_nez
+      MYSQL_ROOT_PASSWORD: root
+    volumes:
+      - eboss_mysql_data:/var/lib/mysql
+
+  redis:
+    image: redis:7-alpine
+    container_name: eboss_redis
+    restart: unless-stopped
+
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: eboss_phpmyadmin
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+    depends_on:
+      - db
+
+volumes:
+  eboss_mysql_data:

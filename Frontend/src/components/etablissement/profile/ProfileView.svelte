@@ -3,6 +3,8 @@
   import Icon from '@iconify/svelte';
   import { authApi } from '../../../lib/api';
   
+  let baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
   export let etablissementId = null;
   $: isOwnProfile = !etablissementId; 
 
@@ -168,7 +170,7 @@
           
           // Charger le logo
           if (userProfile.profile.user.profile_image) {
-            profileImagePreview = `http://127.0.0.1:8000${userProfile.profile.user.profile_image}`;
+            profileImagePreview = `${userProfile.profile.user.profile_image}`;
           } else {
             profileImagePreview = null;
           }
@@ -346,7 +348,7 @@
   }
 </script>
 
-<div class="max-w-7xl mx-auto">
+<div class="mx-auto">
   <!-- En-tête -->
   <div class="mb-6">
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">

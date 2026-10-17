@@ -10,6 +10,21 @@
   export let filterType = 'all';
   export let loading = false;
 
+  export let loadingGoogle = false;
+
+  export let selectedId = null;
+  export let sourceFilter = 'all';
+
+  export let distanceFilter = 0;
+
+  function handleSourceFilter(e) {
+    dispatch('filterSource', e.target.value);
+  }
+
+  function handleDistanceFilter(e) {
+    dispatch('filterDistance', e.target.value);
+  }
+
   const dispatch = createEventDispatcher();
   const typeLabels = {
     ecole: 'École primaire',
@@ -30,8 +45,8 @@
     dispatch('clear');
   }
 
-  function handleSelect(id) {
-    dispatch('select', id);
+  function handleSelect(establishment) {
+    dispatch('select', establishment.id);
   }
 
   function getEstablishmentDistance(establishment) {
@@ -110,16 +125,100 @@
       </button>
     </div>
 
-    <div class="text-sm text-gray-600 pt-1 font-medium">
-      {establishments.length} établissement{establishments.length > 1 ? 's' : ''} trouvé{establishments.length > 1 ? 's' : ''}
+    <!-- Filtre source -->
+    <div class="flex items-center gap-1 p-1 bg-white border border-gray-200 rounded-full">
+      <button
+        on:click={() => dispatch('filterSource', 'all')}
+        class="flex-1 text-xs font-medium px-3 py-1.5 rounded-full transition-all
+              {sourceFilter === 'all' ? 'bg-[#20784d] text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50'}"
+      >
+        Tout
+      </button>
+      <button
+        on:click={() => dispatch('filterSource', 'registered')}
+        class="flex-1 text-xs font-medium px-3 py-1.5 rounded-full transition-all flex items-center justify-center gap-1
+              {sourceFilter === 'registered' ? 'bg-[#20784d] text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50'}"
+      >
+        <span class="w-2 h-2 rounded-full bg-[#20784d]"></span>
+        Inscrits
+      </button>
+      <button
+        on:click={() => dispatch('filterSource', 'osm')}
+        class="flex-1 text-xs font-medium px-3 py-1.5 rounded-full transition-all flex items-center justify-center gap-1
+              {sourceFilter === 'osm' ? 'bg-[#20784d] text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50'}"
+      >
+        <span class="w-2 h-2 rounded-full bg-gray-400"></span>
+        Google
+      </button>
+    </div>
+
+    <!-- Filtre distance -->
+    {#if userLocation}
+      <div class="flex items-center gap-2">
+        <div class="relative flex-1">
+          <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Icon icon="heroicons:map-pin" class="h-4 w-4 text-gray-400" />
+          </div>
+          <select
+            value={distanceFilter}
+            on:change={handleDistanceFilter}
+            class="block w-full pl-9 pr-8 py-2 bg-white border border-gray-200 rounded-full text-sm text-gray-700 appearance-none focus:outline-none focus:ring-2 focus:ring-[#20784d]/50 focus:border-[#20784d] transition-all"
+          >
+            <option value={0}>Toutes distances</option>
+            <option value={500}>Moins de 500 m</option>
+            <option value={1000}>Moins de 1 km</option>
+            <option value={2000}>Moins de 2 km</option>
+            <option value={5000}>Moins de 5 km</option>
+            <option value={10000}>Moins de 10 km</option>
+          </select>
+          <div class="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+            <Icon icon="heroicons:chevron-down" class="h-4 w-4 text-gray-400" />
+          </div>
+        </div>
+      </div>
+    {/if}
+
+    <div class="text-sm text-gray-600 pt-1 font-medium flex items-center justify-between">
+      <span>
+        {establishments.length} établissement{establishments.length > 1 ? 's' : ''} trouvé{establishments.length > 1 ? 's' : ''}
+      </span>
+      {#if distanceFilter > 0 || sourceFilter !== 'all'}
+        <button
+          on:click={handleClear}
+          class="text-xs text-[#20784d] hover:underline font-normal flex items-center gap-1"
+        >
+          <Icon icon="heroicons:x-mark" class="h-3 w-3" />
+          Effacer filtres
+        </button>
+      {/if}
+    </div>
+    <div class="text-xs text-gray-400 font-normal mt-0.5">
+      🟢 Inscrits · ⚪ Google
     </div>
   </div>
 
   <!-- Liste des résultats -->
   <div class="flex-1 overflow-y-auto p-4 sm:p-5 bg-gray-50 space-y-3">
     {#if loading}
-      <div class="flex justify-center py-8">
-        <div class="animate-spin rounded-full h-8 w-8 border-4 border-gray-200 border-t-[#20784d]"></div>
+      <!-- Skeleton : 5 cartes fantômes -->
+      <div class="space-y-3">
+        {#each Array(5) as _}
+          <div class="bg-white p-4 rounded-[2rem] border border-gray-200 animate-pulse">
+            <div class="flex items-start gap-3">
+              <div class="w-10 h-10 rounded-full bg-gray-200 shrink-0"></div>
+              <div class="min-w-0 flex-1 space-y-2">
+                <div class="h-4 bg-gray-200 rounded-full w-3/4"></div>
+                <div class="h-3 bg-gray-100 rounded-full w-full"></div>
+                <div class="h-3 bg-gray-100 rounded-full w-2/3"></div>
+                <div class="flex gap-2 mt-3">
+                  <div class="h-5 bg-gray-100 rounded-full w-16"></div>
+                  <div class="h-5 bg-gray-100 rounded-full w-20"></div>
+                </div>
+              </div>
+              <div class="w-8 h-8 rounded-full bg-gray-100 shrink-0"></div>
+            </div>
+          </div>
+        {/each}
       </div>
     {:else if establishments.length === 0}
       <div class="flex flex-col items-center justify-center h-full text-center p-6 text-gray-500">
@@ -130,13 +229,18 @@
         <p class="text-sm mt-1 text-gray-400">Essayez de modifier vos filtres de recherche.</p>
       </div>
     {:else}
+      {#if loadingGoogle}
+        <div class="flex items-center gap-3 p-3 bg-gray-100 border border-gray-200 rounded-2xl text-sm text-gray-600 animate-pulse">
+          <div class="animate-spin rounded-full h-4 w-4 border-2 border-gray-300 border-t-gray-600 shrink-0"></div>
+          <span>Recherche d'écoles autour de vous…</span>
+        </div>
+      {/if}
       {#each establishments as establishment}
         <div
-          class="bg-white p-4 rounded-[2rem] border border-gray-200 hover:border-green-600 cursor-pointer transition-all duration-200 group relative overflow-hidden"
-          on:click={() => handleSelect(establishment.id)}
+          class="p-4 rounded-[2rem] border cursor-pointer transition-all duration-200 group relative overflow-hidden {selectedId != null && String(establishment.id) === String(selectedId) ? 'bg-green-50 border-[#20784d] shadow-md ring-2 ring-[#20784d]/20' : 'bg-white border-gray-200 hover:border-green-600'}"
+          on:click={() => handleSelect(establishment)}
         >
-          <div class="absolute left-0 top-0 bottom-0 w-1 bg-transparent group-hover:bg-[#20784d] transition-colors"></div>
-
+          <div class="absolute left-0 top-0 bottom-0 w-1 transition-colors {selectedId != null && String(establishment.id) === String(selectedId) ? 'bg-[#20784d]' : 'bg-transparent group-hover:bg-[#20784d]'}"></div>
           <div class="flex items-start gap-3">
             {#if establishment.profileImage}
               <img
@@ -144,6 +248,10 @@
                 alt={establishment.name}
                 class="w-10 h-10 rounded-full object-cover border-2 border-white shadow-sm shrink-0"
               />
+            {:else if establishment.source === 'osm'}
+              <div class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
+                <Icon icon="heroicons:globe-alt" class="h-5 w-5 text-gray-500" />
+              </div>
             {:else}
               <div class="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center shrink-0">
                 <Icon icon="heroicons:building-office-2" class="h-5 w-5 text-green-600" />
@@ -151,33 +259,59 @@
             {/if}
 
             <div class="min-w-0 flex-1">
-              <h3 class="font-medium text-gray-900 group-hover:text-[#20784d] transition-colors line-clamp-1">{establishment.name}</h3>
-              <p class="text-xs text-gray-500 mt-1 flex items-start gap-1">
-                <Icon icon="heroicons:map-pin" class="h-3.5 w-3.5 shrink-0 mt-0.5 text-gray-400" />
-                <span class="line-clamp-2">{establishment.address}</span>
+              <h3 class="font-medium transition-colors line-clamp-1 {selectedId != null && String(establishment.id) === String(selectedId) ? 'text-[#20784d]' : 'text-gray-900 group-hover:text-[#20784d]'}">
+                {establishment.name}
+              </h3>
+              <p class="text-xs mt-1 flex items-start gap-1 {establishment.address ? 'text-gray-500' : 'text-gray-400 italic'}">
+                <Icon icon="heroicons:map-pin" class="h-3.5 w-3.5 shrink-0 mt-0.5 {establishment.address ? 'text-gray-400' : 'text-gray-300'}" />
+                <span class="line-clamp-2">
+                  {establishment.address || 'Adresse non renseignée'}
+                </span>
               </p>
 
               <div class="flex flex-wrap items-center mt-3 gap-2">
-                <span class="text-[10px] font-semibold uppercase tracking-wider px-2 py-1 bg-gray-100 text-gray-600 rounded-full">
-                  {typeLabels[establishment.type] || establishment.type}
-                </span>
-
-                {#if userLocation}
-                  <span class="text-xs font-medium text-[#20784d] bg-green-50 px-2 py-1 rounded-full flex items-center gap-1">
-                    <Icon icon="heroicons:arrows-right-left" class="h-3 w-3" />
-                    {formatDistance(getEstablishmentDistance(establishment))}
+                <!-- Badge source -->
+                {#if establishment.source === 'osm'}
+                  <span class="text-[10px] font-semibold uppercase tracking-wider px-2 py-1 bg-gray-100 text-gray-600 rounded-full flex items-center gap-1">
+                    <Icon icon="heroicons:globe-alt" class="h-3 w-3" />
+                    Google
+                  </span>
+                {:else}
+                  <span class="text-[10px] font-semibold uppercase tracking-wider px-2 py-1 bg-[#20784d]/10 text-[#20784d] rounded-full flex items-center gap-1">
+                    <Icon icon="heroicons:check-badge" class="h-3 w-3" />
+                    Inscrit
                   </span>
                 {/if}
+
+                <!-- Type (seulement pour les inscrits) -->
+                {#if establishment.source !== 'osm'}
+                  <span class="text-[10px] font-semibold uppercase tracking-wider px-2 py-1 bg-gray-100 text-gray-600 rounded-full">
+                    {typeLabels[establishment.type] || establishment.type}
+                  </span>
+                {/if}
+
+                <!-- Distance -->
+                 {#if userLocation}
+                    <span
+                      class="text-xs font-medium text-[#20784d] bg-green-50 px-2 py-1 rounded-full flex items-center gap-1"
+                      title="Distance entre votre position et cet établissement"
+                    >
+                      <Icon icon="heroicons:map-pin" class="h-3 w-3" />
+                      À {formatDistance(getEstablishmentDistance(establishment))} de vous
+                    </span>
+                  {:else}
+                    <span class="text-xs font-medium text-gray-500 bg-gray-50 px-2 py-1 rounded-full flex items-center gap-1">
+                      <Icon icon="heroicons:map-pin" class="h-3 w-3" />
+                      Activez la géolocalisation
+                    </span>
+                  {/if}
               </div>
             </div>
 
             <div class="shrink-0">
               <button
-                class="h-8 w-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 group-hover:bg-[#20784d] group-hover:text-white transition-all shadow-sm"
-                on:click={(e) => {
-                  e.stopPropagation();
-                  handleSelect(establishment.id);
-                }}
+                class="h-8 w-8 rounded-full flex items-center justify-center transition-all shadow-sm {selectedId != null && String(establishment.id) === String(selectedId) ? 'bg-[#20784d] text-white' : 'bg-gray-50 text-gray-400 group-hover:bg-[#20784d] group-hover:text-white'}"
+                on:click={(e) => { e.stopPropagation(); handleSelect(establishment); }}
                 title="Voir sur la carte"
               >
                 <Icon icon="heroicons:chevron-right" class="h-4 w-4" />

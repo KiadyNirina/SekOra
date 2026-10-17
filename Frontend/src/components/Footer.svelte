@@ -83,7 +83,7 @@
     </div>
     <div class="mt-12 border-t border-gray-700 pt-8">
       <p class="text-sm text-gray-400 text-center">
-        &copy; {new Date().getFullYear()} eBoss. Tous droits réservés.
+        &copy; {new Date().getFullYear()} SekOra. Tous droits réservés.
       </p>
     </div>
   </div>

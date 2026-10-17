@@ -3,6 +3,18 @@ from django.contrib.auth.models import AbstractUser
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError
 
+class TimeStampedModel(models.Model):
+    """
+    Modèle abstrait qui ajoute automatiquement :
+    - created_at : date de création (immuable)
+    - updated_at : date de dernière modification (auto)
+    """
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        abstract = True
+
 class User(AbstractUser):
     USER_TYPE_CHOICES = (
         ('etablissement', 'Établissement'),
@@ -34,21 +46,24 @@ class User(AbstractUser):
         self.clean()
         super().save(*args, **kwargs)
 
-class AnneeScolaire(models.Model):
-    nom = models.CharField(max_length=50)  # Ex: "2023-2024"
+class AnneeScolaire(TimeStampedModel):
+    etablissement = models.ForeignKey(
+        'Etablissement',
+        on_delete=models.CASCADE,
+        related_name='annees_scolaires',
+    )
+    nom = models.CharField(max_length=50)
     date_debut = models.DateField()
     date_fin = models.DateField()
     est_active = models.BooleanField(default=False)
-    
-    def __str__(self):
-        return self.nom
 
     class Meta:
         ordering = ['-date_debut']
         verbose_name = "Année scolaire"
         verbose_name_plural = "Années scolaires"
+        unique_together = ('etablissement', 'nom')
 
-class Etablissement(models.Model):
+class Etablissement(TimeStampedModel):
     TYPE_CHOICES = (
         ('ecole', 'École primaire'),
         ('college', 'Collège'),
@@ -86,7 +101,6 @@ class Etablissement(models.Model):
         blank=True,
         help_text="Date de dernière mise à jour des coordonnées"
     )
-    annees_scolaires = models.ManyToManyField(AnneeScolaire, blank=True)
     
     def __str__(self):
         return self.nom
@@ -111,7 +125,7 @@ class Etablissement(models.Model):
         self.coordinates_updated_at = timezone.now()
         self.save()
     
-class Matiere(models.Model):
+class Matiere(TimeStampedModel):
     nom = models.CharField(max_length=100)
     description = models.TextField(blank=True, null=True)
     etablissement = models.ForeignKey(
@@ -128,7 +142,7 @@ class Matiere(models.Model):
         verbose_name = "Matière"
         verbose_name_plural = "Matières"
 
-class Classe(models.Model):
+class Classe(TimeStampedModel):
     etablissement = models.ForeignKey(Etablissement, on_delete=models.CASCADE, related_name='classes')
     annee_scolaire = models.ForeignKey(AnneeScolaire, on_delete=models.CASCADE, related_name='classes')
     nom = models.CharField(max_length=100)  # Ex: "CE1 A" ou "Terminale S"
@@ -145,7 +159,7 @@ class Classe(models.Model):
         unique_together = ('etablissement', 'annee_scolaire', 'nom', 'niveau', 'section')
         verbose_name_plural = "Classes"
 
-class Professeur(models.Model):
+class Professeur(TimeStampedModel):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='professeur')
     etablissement = models.ForeignKey(Etablissement, on_delete=models.SET_NULL, null=True, blank=True, related_name='professeurs')
     matieres = models.ManyToManyField(Matiere, blank=True, related_name='professeurs')
@@ -154,7 +168,7 @@ class Professeur(models.Model):
     def __str__(self):
         return self.user.get_full_name()
 
-class Salle(models.Model):
+class Salle(TimeStampedModel):
     etablissement = models.ForeignKey(
         Etablissement,
         on_delete=models.CASCADE,
@@ -166,7 +180,7 @@ class Salle(models.Model):
     def __str__(self):
         return self.nom
     
-class Cours(models.Model):
+class Cours(TimeStampedModel):
     TYPE_CHOICES = (
         ('regulier', 'Régulier'),
         ('specifique', 'Spécifique'),
@@ -260,7 +274,7 @@ class Cours(models.Model):
             self.type_cours = 'specifique'
         super().save(*args, **kwargs)
 
-class Periode(models.Model):
+class Periode(TimeStampedModel):
     etablissement = models.ForeignKey(Etablissement, on_delete=models.CASCADE, related_name='periodes')
     annee_scolaire = models.ForeignKey(AnneeScolaire, on_delete=models.CASCADE, related_name='periodes')
     nom = models.CharField(max_length=50)  # ex: "1er Trimestre", "Semestre 1"
@@ -275,7 +289,7 @@ class Periode(models.Model):
     def __str__(self):
         return f"{self.nom} ({self.annee_scolaire.nom})"
 
-class Evaluation(models.Model):
+class Evaluation(TimeStampedModel):
     TYPE_CHOICES = (
         ('controle', 'Contrôle'),
         ('examen', 'Examen'),
@@ -307,7 +321,7 @@ class Evaluation(models.Model):
     def __str__(self):
         return f"{self.nom} - {self.classe.nom} ({self.date})"
 
-class Eleve(models.Model):
+class Eleve(TimeStampedModel):
     STATUS_CHOICES = (
         ('actif', 'Actif'),
         ('inactif', 'Inactif'),
@@ -321,7 +335,7 @@ class Eleve(models.Model):
     def __str__(self):
         return f"{self.user.get_full_name()} ({self.classe.nom if self.classe else 'Non assigné'})"
 
-class Note(models.Model):
+class Note(TimeStampedModel):
     evaluation = models.ForeignKey(Evaluation, on_delete=models.CASCADE, related_name='notes')
     eleve = models.ForeignKey(Eleve, on_delete=models.CASCADE, related_name='notes')
     note = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)  # ex: 15.5
@@ -334,9 +348,36 @@ class Note(models.Model):
     def __str__(self):
         return f"{self.eleve} - {self.evaluation.nom} : {self.note or 'Absent'}"
 
-class Parent(models.Model):
+class Parent(TimeStampedModel):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='parent')
     enfants = models.ManyToManyField(Eleve, blank=True)
     
     def __str__(self):
         return self.user.get_full_name()
+    
+class EcoleOSM(models.Model):
+    """
+    Écoles importées depuis OpenStreetMap (Overpass API).
+    Licence ODbL — crédit OpenStreetMap obligatoire.
+    """
+    osm_id = models.CharField(max_length=50, unique=True, db_index=True)
+    nom = models.CharField(max_length=255, blank=True)
+    adresse = models.CharField(max_length=500, blank=True)
+    latitude = models.FloatField(db_index=True)
+    longitude = models.FloatField(db_index=True)
+    type_ecole = models.CharField(max_length=50, blank=True)  # school, college, university
+    source = models.CharField(max_length=20, default='osm')
+
+    # Métadonnées
+    imported_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "École OSM"
+        verbose_name_plural = "Écoles OSM"
+        indexes = [
+            models.Index(fields=['latitude', 'longitude']),
+        ]
+
+    def __str__(self):
+        return self.nom or f"École OSM #{self.osm_id}"

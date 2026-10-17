@@ -1,7 +1,7 @@
 // src/lib/api.js
 import { browser } from '$app/environment';
 
-const API_BASE_URL = 'http://127.0.0.1:8000/school';
+const API_BASE_URL = `${import.meta.env.VITE_API_BASE_URL}/school`;
 
 function formatDjangoError(errorData) {
     if (!errorData) return 'Erreur inconnue';
@@ -372,6 +372,19 @@ export const authApi = {
     createAnneeScolaire: (data) => fetchWithAuth('/api/annees-scolaires/', {
         method: 'POST',
         body: JSON.stringify(data),
+    }).then(response => response.json()),
+
+    updateAnneeScolaire: (id, data) => fetchWithAuth(`/api/annees-scolaires/${id}/`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+    }).then(response => response.json()),
+
+    deleteAnneeScolaire: (id) => fetchWithAuth(`/api/annees-scolaires/${id}/`, {
+        method: 'DELETE',
+    }).then(() => ({ message: 'Année scolaire supprimée' })),
+
+    activateAnneeScolaire: (id) => fetchWithAuth(`/api/annees-scolaires/${id}/activate/`, {
+        method: 'POST',
     }).then(response => response.json()),
 
     // Gestion des classes

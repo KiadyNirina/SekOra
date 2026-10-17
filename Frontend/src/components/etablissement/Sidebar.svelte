@@ -5,10 +5,11 @@
 
   export let onClose;
 
-  let baseUrl = 'http://localhost:8000';
+  let baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
   const navigation = [
     { name: 'Tableau de bord', icon: 'heroicons:home', href: '/etablissement/dashboard' },
+    { name: 'Années scolaires', icon: 'heroicons:calendar-days', href: '/etablissement/annees-scolaires' },
     { name: 'Étudiants', icon: 'heroicons:user-group', href: '/etablissement/etudiants' },
     { name: 'Classes', icon: 'heroicons:academic-cap', href: '/etablissement/classes', badge: 'new' },
     { name: 'Matières', icon: 'heroicons:book-open', href: '/etablissement/matieres' },
@@ -23,42 +24,44 @@
   ];
 </script>
 
-<div class="flex flex-col h-full">
-  <!-- Logo -->
-  <div class="flex items-center h-16 flex-shrink-0 px-4">
-    <img src="/icons/logo.png" class="h-10" alt="" />
+<div class="flex flex-col h-full bg-white">
+  <!-- Logo + bouton fermer -->
+  <div class="flex items-center h-16 flex-shrink-0 px-4 border-b border-gray-100">
+    <img src="/icons/logo.png" class="h-10" alt="Logo" />
 
     {#if onClose}
       <button
         on:click={onClose}
-        class="ml-auto p-1 rounded-md text-white hover:bg-green-700 focus:outline-none"
+        class="ml-auto p-2 rounded-lg text-gray-500 hover:text-[#20784d] hover:bg-green-50 focus:outline-none transition-colors"
+        aria-label="Fermer le menu"
       >
-        <Icon icon="heroicons:x" class="h-6 w-6" />
+        <Icon icon="heroicons:x-mark" class="h-5 w-5" />
       </button>
     {/if}
   </div>
 
   <!-- Navigation -->
-  <div class="flex-1 flex flex-col overflow-y-auto">
-    <nav class="flex-1 px-2 py-4 space-y-1">
+  <div class="flex-1 overflow-y-auto">
+    <nav class="px-2 py-4 space-y-1">
       {#each navigation as item}
         <a
           href={item.href}
-          class="group flex items-center px-2 py-2 text-sm font-medium rounded-md
+          on:click={() => onClose?.()}
+          class="group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-colors
           {page.url.pathname === item.href
-            ? 'bg-green-100 text-green-700'
+            ? 'bg-green-100 text-[#20784d]'
             : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}"
         >
           <Icon
             icon={item.icon}
-            class="mr-3 flex-shrink-0 h-6 w-6
+            class="mr-3 flex-shrink-0 h-5 w-5
             {page.url.pathname === item.href
-              ? 'text-green-500'
+              ? 'text-[#20784d]'
               : 'text-gray-400 group-hover:text-gray-500'}"
           />
-          <span class="flex-1">{item.name}</span>
+          <span class="flex-1 truncate">{item.name}</span>
           {#if item.badge}
-            <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+            <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
               {item.badge}
             </span>
           {/if}
@@ -68,32 +71,40 @@
   </div>
 
   <!-- User Profile -->
-  <div class="flex-shrink-0 flex border-t border-gray-200 p-4">
+  <div class="flex-shrink-0 border-t border-gray-100 p-4">
     {#if $user}
       <div class="flex items-center">
-        <div class="h-9 w-9 rounded-full bg-green-100 flex items-center justify-center">
-          <img src="{baseUrl}{$user.profile.user.profile_image}" class="h-10" alt="" />
+        <div class="h-9 w-9 rounded-full bg-green-100 flex items-center justify-center overflow-hidden flex-shrink-0">
+          {#if $user.profile?.user?.profile_image}
+            <img src="{$user.profile.user.profile_image}" class="h-9 w-9 object-cover" alt="" />
+          {:else}
+            <Icon icon="heroicons:user-circle" class="h-6 w-6 text-green-600" />
+          {/if}
         </div>
 
-        <div class="ml-3">
-          <p class="text-sm font-medium text-gray-700">
+        <div class="ml-3 min-w-0 flex-1">
+          <p class="text-sm font-medium text-gray-700 truncate">
             {$user.first_name
               ? `${$user.first_name} ${$user.last_name}`
               : $user.username || 'Utilisateur'}
           </p>
 
-          <a href="/etablissement/profil" class="text-xs font-medium text-green-600 hover:text-green-500">
+          <a
+            href="/etablissement/profil"
+            on:click={() => onClose?.()}
+            class="text-xs font-medium text-[#20784d] hover:text-green-600"
+          >
             Voir profil
           </a>
         </div>
       </div>
     {:else}
       <div class="flex items-center">
-        <div class="h-9 w-9 rounded-full bg-green-100 flex items-center justify-center">
+        <div class="h-9 w-9 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
           <Icon icon="heroicons:user-circle" class="h-6 w-6 text-green-600" />
         </div>
         <div class="ml-3">
-          <p class="text-sm font-medium text-gray-700">Chargement...</p>
+          <p class="text-sm font-medium text-gray-500">Chargement...</p>
         </div>
       </div>
     {/if}
