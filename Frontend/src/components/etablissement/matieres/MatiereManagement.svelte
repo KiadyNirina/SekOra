@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import Icon from '@iconify/svelte';
   import { authApi } from '$lib/api';
-  import { anneeActive, loadAnneesScolaires } from '$lib/stores/anneeScolaire.js';
+  import { anneeActive, anneesScolaires, loadAnneesScolaires } from '$lib/stores/anneeScolaire.js';
 
   let matieres = [];
   let loading = true;
@@ -25,12 +25,22 @@
 
   // Filtres
   let searchTerm = '';
+  let selectedAnneeId = null;
   let filteredMatieres = [];
 
   onMount(async () => {
     await loadAnneesScolaires();
+
+    // Par défaut : année active si elle existe
+    selectedAnneeId = $anneeActive?.id ?? null;
+
     await loadData();
   });
+
+  // Quand l'année active change (store), on recale le filtre si rien n'est choisi
+  $: if ($anneeActive && selectedAnneeId === null) {
+    selectedAnneeId = $anneeActive.id;
+  }
 
   async function loadData() {
     loading = true;
@@ -45,8 +55,8 @@
 
       // Filtre par année active (si définie)
       const filters = { etablissement: etablissementId };
-      if ($anneeActive) {
-        filters.annee_scolaire = $anneeActive.id;
+      if (selectedAnneeId !== null) {
+        filters.annee_scolaire = selectedAnneeId;
       }
 
       const data = await authApi.getMatieres(filters);
@@ -59,6 +69,10 @@
     } finally {
       loading = false;
     }
+  }
+
+  async function handleAnneeChange() {
+    await loadData();
   }
 
   function applyFilters() {
@@ -199,11 +213,20 @@
     <div class="mb-4 sm:mb-0">
       <h1 class="text-2xl font-bold text-gray-900">Gestion des Matières</h1>
       <p class="mt-2 text-sm text-gray-700">
-        {matieres.length} matière{matieres.length > 1 ? 's' : ''} au total
-        {#if $anneeActive}
-          <span class="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-            <Icon icon="heroicons:calendar" class="h-3 w-3" />
-            {$anneeActive.nom}
+        {matieres.length} matière{matieres.length > 1 ? 's' : ''}
+        {#if selectedAnneeId !== null}
+          {#each $anneesScolaires as annee (annee.id)}
+            {#if annee.id === selectedAnneeId}
+              <span class="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                <Icon icon="heroicons:calendar" class="h-3 w-3" />
+                {annee.nom}
+              </span>
+            {/if}
+          {/each}
+        {:else}
+          <span class="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+            <Icon icon="heroicons:calendar-days" class="h-3 w-3" />
+            Toutes les années
           </span>
         {/if}
       </p>
@@ -328,22 +351,60 @@
     </div>
   {/if}
 
-  <!-- Recherche -->
+  <!-- Recherche + Filtre année -->
   <div class="mt-6 bg-white shadow-sm rounded-lg p-6 border border-gray-200">
-    <div>
-      <label for="search" class="block text-sm font-medium text-gray-700">Recherche</label>
-      <div class="mt-1 relative rounded-lg shadow-sm bg-gray-50">
-        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          <Icon icon="heroicons:magnifying-glass" class="h-5 w-5 text-gray-400" />
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <!-- Recherche -->
+      <div class="sm:col-span-2">
+        <label for="search" class="block text-sm font-medium text-gray-700">
+          Recherche
+        </label>
+        <div class="mt-1 relative rounded-lg shadow-sm bg-gray-50">
+          <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Icon icon="heroicons:magnifying-glass" class="h-5 w-5 text-gray-400" />
+          </div>
+          <input
+            type="text"
+            id="search"
+            bind:value={searchTerm}
+            class="block w-full pl-9 pr-3 py-1.5 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-green-500 focus:border-green-500 sm:text-sm"
+            placeholder="Rechercher une matière..."
+            on:input={applyFilters}
+          />
         </div>
-        <input
-          type="text"
-          id="search"
-          bind:value={searchTerm}
-          class="block w-full pl-9 pr-3 py-1.5 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-green-500 focus:border-green-500 sm:text-sm"
-          placeholder="Rechercher une matière..."
-          on:input={applyFilters}
-        />
+      </div>
+
+      <!-- Filtre année scolaire -->
+      <div>
+        <label for="annee-filter" class="block text-sm font-medium text-gray-700">
+          Année scolaire
+        </label>
+        <div class="mt-1 relative">
+          <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Icon icon="heroicons:calendar" class="h-5 w-5 text-gray-400" />
+          </div>
+          <select
+            id="annee-filter"
+            bind:value={selectedAnneeId}
+            on:change={handleAnneeChange}
+            class="block w-full pl-9 pr-8 py-1.5 border border-gray-300 rounded-md bg-white text-sm focus:outline-none focus:ring-1 focus:ring-green-500 focus:border-green-500"
+          >
+            <option value={null}>Toutes les années</option>
+            {#each $anneesScolaires as annee (annee.id)}
+              <option value={annee.id}>
+                {annee.nom}{annee.est_active ? ' (active)' : ''}
+              </option>
+            {/each}
+          </select>
+        </div>
+
+        <!-- Petit badge si "Toutes les années" -->
+        {#if selectedAnneeId === null && $anneesScolaires.length > 1}
+          <p class="mt-1 text-xs text-gray-500 flex items-center gap-1">
+            <Icon icon="heroicons:information-circle" class="h-3.5 w-3.5" />
+            Affichage de toutes les années confondues
+          </p>
+        {/if}
       </div>
     </div>
   </div>
