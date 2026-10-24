@@ -38,6 +38,7 @@ import time
 from django.conf import settings
 import socket
 import urllib3.util.connection as urllib3_cn
+from datetime import timedelta
 
 def _allowed_gai_family():
     return socket.AF_INET
@@ -1081,3 +1082,119 @@ class ImportOSMSchoolsView(APIView):
                 'success': False,
                 'message': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+            
+class RecentActivityView(APIView):
+    """
+    Retourne les activités récentes de l'établissement connecté.
+    Agrège élèves récents, évaluations publiées, notes ajoutées.
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not hasattr(request.user, 'etablissement'):
+            return Response(
+                {'error': 'Établissement requis'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        etablissement = request.user.etablissement
+        limit = int(request.query_params.get('limit', 10))
+        activities = []
+
+        # ---------- 1. Nouveaux élèves (30 derniers jours) ----------
+        recent_students = Eleve.objects.filter(
+            etablissement=etablissement,
+            created_at__gte=timezone.now() - timedelta(days=30)
+        ).select_related('user', 'classe').order_by('-created_at')[:limit]
+
+        for eleve in recent_students:
+            activities.append({
+                'type': 'new_student',
+                'name': eleve.user.get_full_name() or eleve.user.email,
+                'class': eleve.classe.nom if eleve.classe else 'Non assigné',
+                'date': eleve.created_at.isoformat(),
+                'timestamp': eleve.created_at,
+            })
+
+        # ---------- 2. Évaluations publiées récemment ----------
+        recent_evaluations = Evaluation.objects.filter(
+            etablissement=etablissement,
+            statut='publie',
+            updated_at__gte=timezone.now() - timedelta(days=30)
+        ).select_related('classe', 'matiere', 'professeur__user').order_by('-updated_at')[:limit]
+
+        for ev in recent_evaluations:
+            activities.append({
+                'type': 'grade',
+                'name': f"{ev.nom} — {ev.matiere.nom}",
+                'class': ev.classe.nom,
+                'date': ev.updated_at.isoformat(),
+                'timestamp': ev.updated_at,
+            })
+
+        # ---------- 3. Professeurs ajoutés récemment ----------
+        recent_profs = Professeur.objects.filter(
+            etablissement=etablissement,
+            created_at__gte=timezone.now() - timedelta(days=30)
+        ).select_related('user').order_by('-created_at')[:limit]
+
+        for prof in recent_profs:
+            activities.append({
+                'type': 'new_teacher',
+                'name': prof.user.get_full_name() or prof.user.email,
+                'class': '-',
+                'date': prof.created_at.isoformat(),
+                'timestamp': prof.created_at,
+            })
+
+        # ---------- 4. Classes créées récemment ----------
+        recent_classes = Classe.objects.filter(
+            etablissement=etablissement,
+            created_at__gte=timezone.now() - timedelta(days=30)
+        ).order_by('-created_at')[:limit]
+
+        for classe in recent_classes:
+            activities.append({
+                'type': 'new_class',
+                'name': classe.nom,
+                'class': classe.niveau,
+                'date': classe.created_at.isoformat(),
+                'timestamp': classe.created_at,
+            })
+
+        # ---------- Tri final par date décroissante ----------
+        activities.sort(key=lambda a: a['timestamp'], reverse=True)
+        activities = activities[:limit]
+
+        # ---------- Formatage de la date relative ----------
+        for act in activities:
+            act['time'] = self._format_relative_time(act['timestamp'])
+            del act['timestamp']  # retire le datetime pour éviter le problème JSON
+
+        return Response({
+            'count': len(activities),
+            'results': activities,
+        })
+
+    @staticmethod
+    def _format_relative_time(dt):
+        """Formate une date en 'il y a X minutes/heures/jours'."""
+        now = timezone.now()
+        diff = now - dt
+
+        seconds = diff.total_seconds()
+        if seconds < 60:
+            return "à l'instant"
+        elif seconds < 3600:
+            minutes = int(seconds // 60)
+            return f"il y a {minutes} min"
+        elif seconds < 86400:
+            hours = int(seconds // 3600)
+            return f"il y a {hours} h"
+        elif seconds < 604800:
+            days = int(seconds // 86400)
+            return f"il y a {days} j"
+        else:
+            return dt.strftime('%d/%m/%Y')

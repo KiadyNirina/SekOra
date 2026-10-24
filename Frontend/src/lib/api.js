@@ -572,6 +572,11 @@ export const authApi = {
     unpublishEvaluation: (id) => fetchWithAuth(`/api/evaluations/${id}/brouillon/`, {
         method: 'POST',
     }).then(res => res.json()),
+    
+    getRecentActivity: (limit = 10) => {
+        return fetchWithAuth(`/api/dashboard/activity/?limit=${limit}`)
+            .then(response => response.json());
+    },
 };
 
 export const authStore = {
