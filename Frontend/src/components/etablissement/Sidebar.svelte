@@ -20,6 +20,7 @@
     { name: 'Communication', icon: 'heroicons:chat-bubble-left-right', href: '/etablissement/communication' },
     { name: 'Finances', icon: 'heroicons:currency-dollar', href: '/etablissement/finances' },
     { name: 'Documents', icon: 'heroicons:folder', href: '/etablissement/documents' },
+    { name: 'Activités', icon: 'heroicons:clock', href: '/etablissement/activites' },
     { name: 'Paramètres', icon: 'heroicons:cog', href: '/etablissement/parametres' }
   ];
 </script>

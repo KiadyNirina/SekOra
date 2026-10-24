@@ -1,9 +1,13 @@
 <script>
   import Icon from '@iconify/svelte';
+  import { createEventDispatcher } from 'svelte';
 
   export let activities = [];
   export let loading = false;
-  export let limit = 10;
+  export let error = null;
+  export let viewAllHref = '/etablissement/activites';
+
+  const dispatch = createEventDispatcher();
 
   const activityIcons = {
     new_student: 'heroicons:user-plus',
@@ -52,12 +56,25 @@
 </script>
 
 <div class="bg-white shadow rounded-lg overflow-hidden">
-  <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+  <!-- Header avec bouton refresh -->
+  <div class="px-4 py-5 sm:px-6 border-b border-gray-200 flex items-center justify-between">
     <h3 class="text-lg leading-6 font-medium text-gray-900">Activités récentes</h3>
+    <button
+      on:click={() => dispatch('refresh')}
+      disabled={loading}
+      class="p-1.5 rounded-lg text-gray-400 hover:text-[#20784d] hover:bg-green-50 transition-colors disabled:opacity-50"
+      title="Rafraîchir"
+    >
+      <Icon icon="heroicons:arrow-path" class={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+    </button>
   </div>
 
-  {#if loading}
-    <!-- Skeleton loader -->
+  {#if error}
+    <div class="px-4 py-6 text-center">
+      <Icon icon="heroicons:exclamation-circle" class="h-8 w-8 text-red-400 mx-auto mb-2" />
+      <p class="text-sm text-red-700">{error}</p>
+    </div>
+  {:else if loading}
     <div class="divide-y divide-gray-200">
       {#each Array(3) as _}
         <div class="px-4 py-4 sm:px-6 animate-pulse">
@@ -101,7 +118,7 @@
 
   <div class="bg-gray-50 px-4 py-3 sm:px-6">
     <a
-      href="/etablissement/activites"
+      href={viewAllHref}
       class="text-sm font-medium text-[#20784d] hover:text-green-600"
     >
       Voir toutes les activités →

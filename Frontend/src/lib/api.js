@@ -572,9 +572,20 @@ export const authApi = {
     unpublishEvaluation: (id) => fetchWithAuth(`/api/evaluations/${id}/brouillon/`, {
         method: 'POST',
     }).then(res => res.json()),
-    
+
     getRecentActivity: (limit = 10) => {
         return fetchWithAuth(`/api/dashboard/activity/?limit=${limit}`)
+            .then(response => response.json());
+    },
+
+    getActivities: (filters = {}) => {
+        const query = new URLSearchParams();
+        if (filters.type) query.append('type', filters.type);
+        if (filters.search) query.append('search', filters.search);
+        if (filters.days) query.append('days', filters.days);
+        if (filters.page) query.append('page', filters.page);
+        if (filters.page_size) query.append('page_size', filters.page_size);
+        return fetchWithAuth(`/api/activities/?${query.toString()}`)
             .then(response => response.json());
     },
 };

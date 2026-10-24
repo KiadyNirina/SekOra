@@ -14,6 +14,7 @@
 
   let activities = [];
   let activitiesLoading = true;
+  let activitiesError = null;
 
   let etablissementId = null;
   let loading = true;
@@ -21,8 +22,9 @@
 
   async function loadDashboard() {
     loading = true;
-    error = null;
     activitiesLoading = true;
+    error = null;
+    activitiesError = null;
 
     try {
       const profile = await authApi.getProfile();
@@ -32,12 +34,17 @@
         throw new Error('Établissement non trouvé');
       }
 
-      // Charge stats + activités en parallèle
-      const [eleves, professeurs, classes, activityData] = await Promise.all([
+      // ⬇️ Charge les 5 dernières activités via le nouvel endpoint
+      const [eleves, professeurs, classes, activitiesData] = await Promise.all([
         authApi.getEleves({ etablissement: etablissementId, limit: 1 }),
         authApi.getProfesseurs({ etablissement: etablissementId, limit: 1 }),
         authApi.getClasses({ etablissement: etablissementId, limit: 1 }),
-        authApi.getRecentActivity(10).catch(() => ({ results: [] })),
+        authApi.getActivities({ page_size: 5, days: 90 })
+          .catch(err => {
+            console.error('Erreur activités:', err);
+            activitiesError = err.message || 'Impossible de charger les activités';
+            return { results: [] };
+          }),
       ]);
 
       const getCount = (data) => {
@@ -55,12 +62,26 @@
         pendingPayments: 12,
       };
 
-      activities = activityData.results || [];
+      activities = activitiesData.results || [];
     } catch (err) {
       console.error('Erreur lors du chargement du dashboard:', err);
       error = err.message || 'Impossible de charger les données';
     } finally {
       loading = false;
+      activitiesLoading = false;
+    }
+  }
+
+  // Recharge les activités seules (utile pour le bouton "Rafraîchir" du widget)
+  async function reloadActivities() {
+    activitiesLoading = true;
+    activitiesError = null;
+    try {
+      const data = await authApi.getActivities({ page_size: 5, days: 90 });
+      activities = data.results || [];
+    } catch (err) {
+      activitiesError = err.message || 'Impossible de charger les activités';
+    } finally {
       activitiesLoading = false;
     }
   }
@@ -98,11 +119,13 @@
   <div class="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
     <CalendarOverview />
 
-    <!-- ⬇️ Passage des activités + état loading -->
+    <!-- ⬇️ Widget activités avec lien vers la page complète -->
     <RecentActivities
       {activities}
       loading={activitiesLoading}
-      limit={10}
+      error={activitiesError}
+      on:refresh={reloadActivities}
+      viewAllHref="/etablissement/activites"
     />
   </div>
 {/if}

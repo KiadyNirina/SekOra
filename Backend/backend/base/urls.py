@@ -33,7 +33,7 @@ urlpatterns = [
     path('api/reverse-geocode/', reverse_geocode_proxy, name='reverse-geocode-proxy'),
     path('api/nearby/', nearby_schools_proxy, name='nearby-schools'),
     path('admin/import-osm/', ImportOSMSchoolsView.as_view(), name='import-osm-schools'),
-    path('api/dashboard/activity/', RecentActivityView.as_view(), name='dashboard-activity'),
+    path('api/activities/', ActivityListView.as_view(), name='activities-list'),
 ]
 
 if settings.DEBUG:
