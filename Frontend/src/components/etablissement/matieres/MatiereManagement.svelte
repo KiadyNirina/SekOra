@@ -28,6 +28,12 @@
   let selectedAnneeId = null;
   let filteredMatieres = [];
 
+  let showClassesFor = null;
+
+  function showClassesModal(matiere) {
+    showClassesFor = matiere;
+  }
+
   onMount(async () => {
     await loadAnneesScolaires();
 
@@ -449,6 +455,9 @@
             <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               Cours associés
             </th>
+            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Classes
+            </th>
             <th scope="col" class="relative px-6 py-3">
               <span class="sr-only">Actions</span>
             </th>
@@ -484,6 +493,20 @@
                 <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
                   {matiere.cours_count || 0} cours
                 </span>
+              </td>
+              <td class="px-6 py-4">
+                {#if matiere.classes_count > 0}
+                  <button
+                    on:click={() => showClassesModal(matiere)}
+                    class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+                    title="Voir les classes"
+                  >
+                    <Icon icon="heroicons:academic-cap" class="h-3 w-3" />
+                    {matiere.classes_count} classe{matiere.classes_count > 1 ? 's' : ''}
+                  </button>
+                {:else}
+                  <span class="text-xs text-gray-400 italic">—</span>
+                {/if}
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                 <div class="flex justify-end space-x-3">
@@ -527,6 +550,74 @@
   {/if}
   </div>
 </div>
+
+{#if showClassesFor}
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center p-4"
+    role="dialog"
+    aria-modal="true"
+  >
+    <div
+      class="absolute inset-0 bg-black/50"
+      on:click={() => showClassesFor = null}
+      on:keydown={(e) => e.key === 'Escape' && (showClassesFor = null)}
+      role="button"
+      tabindex="-1"
+      aria-label="Fermer"
+    ></div>
+
+    <div class="relative w-full max-w-lg bg-white rounded-xl shadow-xl overflow-hidden">
+      <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+        <h3 class="text-lg font-semibold text-gray-900">
+          Classes — {showClassesFor.nom}
+        </h3>
+        <button
+          on:click={() => showClassesFor = null}
+          class="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+        >
+          <Icon icon="heroicons:x-mark" class="h-5 w-5" />
+        </button>
+      </div>
+
+      <div class="p-5 max-h-96 overflow-y-auto">
+        {#if showClassesFor.classes_details?.length > 0}
+          <ul class="space-y-2">
+            {#each showClassesFor.classes_details as classe}
+              <li class="flex items-center gap-3 p-3 rounded-lg border border-gray-100 hover:bg-gray-50">
+                <div class="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                  <Icon icon="heroicons:academic-cap" class="h-5 w-5 text-blue-600" />
+                </div>
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm font-medium text-gray-900 truncate">{classe.nom}</p>
+                  <p class="text-xs text-gray-500">
+                    {classe.niveau}{classe.section ? ` ${classe.section}` : ''}
+                    {#if classe.annee_scolaire_nom}
+                      · {classe.annee_scolaire_nom}
+                    {/if}
+                  </p>
+                </div>
+              </li>
+            {/each}
+          </ul>
+        {:else}
+          <div class="text-center py-8 text-gray-500">
+            <Icon icon="heroicons:academic-cap" class="h-10 w-10 text-gray-300 mx-auto mb-2" />
+            <p class="text-sm">Aucune classe n'utilise cette matière.</p>
+          </div>
+        {/if}
+      </div>
+
+      <div class="px-5 py-4 bg-gray-50 border-t border-gray-100 flex justify-end">
+        <button
+          on:click={() => showClassesFor = null}
+          class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+        >
+          Fermer
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <style>
   .animate-spin {

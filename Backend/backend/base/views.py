@@ -535,6 +535,9 @@ class MatiereViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = Matiere.objects.select_related(
             'etablissement', 'annee_scolaire'
+        ).prefetch_related(
+            'classes',
+            'classes__annee_scolaire',
         )
 
         etablissement_id = self.request.query_params.get('etablissement')

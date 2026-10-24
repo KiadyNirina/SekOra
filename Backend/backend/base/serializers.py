@@ -67,9 +67,9 @@ class ClasseSerializer(serializers.ModelSerializer):
         fields = '__all__'
     
     def validate(self, data):
-        etablissement = data.get('etablissement')
-        annee_scolaire = data.get('annee_scolaire')
-        matieres = data.get('matieres') or []
+        etablissement = data.get('etablissement') or (self.instance.etablissement if self.instance else None)
+        annee_scolaire = data.get('annee_scolaire') or (self.instance.annee_scolaire if self.instance else None)
+        matieres = data.get('matieres')
 
         if etablissement and annee_scolaire:
             if annee_scolaire.etablissement_id != etablissement.id:
@@ -77,11 +77,14 @@ class ClasseSerializer(serializers.ModelSerializer):
                     'annee_scolaire': "Cette année scolaire n'appartient pas à cet établissement"
                 })
 
-        for matiere in matieres:
-            if matiere.annee_scolaire_id and matiere.annee_scolaire_id != annee_scolaire.id:
-                raise serializers.ValidationError({
-                    'matieres': f"La matière « {matiere.nom} » n'appartient pas à cette année scolaire"
-                })
+        if matieres is not None and annee_scolaire:
+            for matiere in matieres:
+                if matiere.annee_scolaire_id and matiere.annee_scolaire_id != annee_scolaire.id:
+                    raise serializers.ValidationError({
+                        'matieres': (
+                            f"La matière « {matiere.nom} » appartient à une autre année scolaire"
+                        )
+                    })
 
         return data
 
@@ -99,12 +102,31 @@ class MatiereSerializer(serializers.ModelSerializer):
         read_only=True
     )
 
+    classes_count = serializers.SerializerMethodField()
+    classes_details = serializers.SerializerMethodField()
+
     class Meta:
         model = Matiere
         fields = [
             'id', 'nom', 'description',
             'etablissement', 'annee_scolaire', 'annee_scolaire_nom',
+            'classes_count', 'classes_details',
             'created_at', 'updated_at',
+        ]
+
+    def get_classes_count(self, obj):
+        return obj.classes.count()
+
+    def get_classes_details(self, obj):
+        return [
+            {
+                'id': c.id,
+                'nom': c.nom,
+                'niveau': c.niveau,
+                'section': c.section,
+                'annee_scolaire_nom': c.annee_scolaire.nom if c.annee_scolaire else None,
+            }
+            for c in obj.classes.all()
         ]
 
     def validate(self, data):
