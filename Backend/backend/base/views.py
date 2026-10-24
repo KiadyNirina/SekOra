@@ -533,20 +533,36 @@ class MatiereViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        queryset = Matiere.objects.select_related('etablissement')
+        queryset = Matiere.objects.select_related(
+            'etablissement', 'annee_scolaire'
+        )
 
         etablissement_id = self.request.query_params.get('etablissement')
+        annee_scolaire_id = self.request.query_params.get('annee_scolaire')
         search = self.request.query_params.get('search')
 
-        if etablissement_id:
+        # Si l'utilisateur est un établissement, restreindre à son périmètre
+        if hasattr(self.request.user, 'etablissement'):
+            queryset = queryset.filter(
+                etablissement=self.request.user.etablissement
+            )
+        elif etablissement_id:
             queryset = queryset.filter(etablissement_id=etablissement_id)
 
+        if annee_scolaire_id:
+            queryset = queryset.filter(annee_scolaire_id=annee_scolaire_id)
+
         if search:
-            queryset = queryset.filter(
-                nom__icontains=search
-            )
+            queryset = queryset.filter(nom__icontains=search)
 
         return queryset.order_by('nom')
+
+    def perform_create(self, serializer):
+        # Force l'établissement de l'utilisateur connecté
+        if hasattr(self.request.user, 'etablissement'):
+            serializer.save(etablissement=self.request.user.etablissement)
+        else:
+            serializer.save()
     
 class SalleViewSet(viewsets.ModelViewSet):
     serializer_class = SalleSerializer

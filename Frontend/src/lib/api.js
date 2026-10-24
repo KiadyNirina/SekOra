@@ -408,8 +408,11 @@ export const authApi = {
     }).then(() => ({ message: 'Classe supprimée' })),
 
     getMatieres: (filters = {}) => {
-        const query = new URLSearchParams(filters).toString();
-        return fetchWithAuth(`/api/matieres/?${query}`).then(response => response.json());
+        const query = new URLSearchParams();
+        if (filters.etablissement) query.append('etablissement', filters.etablissement);
+        if (filters.annee_scolaire) query.append('annee_scolaire', filters.annee_scolaire);
+        if (filters.search) query.append('search', filters.search);
+        return fetchWithAuth(`/api/matieres/?${query.toString()}`).then(r => r.json());
     },
 
     createMatiere: (data) => fetchWithAuth('/api/matieres/', {

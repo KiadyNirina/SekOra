@@ -69,34 +69,68 @@ class ClasseSerializer(serializers.ModelSerializer):
     def validate(self, data):
         etablissement = data.get('etablissement')
         annee_scolaire = data.get('annee_scolaire')
+        matieres = data.get('matieres') or []
 
         if etablissement and annee_scolaire:
             if annee_scolaire.etablissement_id != etablissement.id:
                 raise serializers.ValidationError({
                     'annee_scolaire': "Cette année scolaire n'appartient pas à cet établissement"
                 })
+
+        for matiere in matieres:
+            if matiere.annee_scolaire_id and matiere.annee_scolaire_id != annee_scolaire.id:
+                raise serializers.ValidationError({
+                    'matieres': f"La matière « {matiere.nom} » n'appartient pas à cette année scolaire"
+                })
+
         return data
 
 class MatiereSerializer(serializers.ModelSerializer):
     etablissement = serializers.PrimaryKeyRelatedField(
         queryset=Etablissement.objects.all()
     )
+    annee_scolaire = serializers.PrimaryKeyRelatedField(
+        queryset=AnneeScolaire.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    annee_scolaire_nom = serializers.CharField(
+        source='annee_scolaire.nom',
+        read_only=True
+    )
 
     class Meta:
         model = Matiere
-        fields = ['id', 'nom', 'description', 'etablissement', 'created_at', 'updated_at']
+        fields = [
+            'id', 'nom', 'description',
+            'etablissement', 'annee_scolaire', 'annee_scolaire_nom',
+            'created_at', 'updated_at',
+        ]
 
     def validate(self, data):
         nom = data.get('nom')
         etablissement = data.get('etablissement')
+        annee_scolaire = data.get('annee_scolaire')
 
-        if Matiere.objects.filter(
+        # Vérifier que l'année appartient bien à l'établissement
+        if etablissement and annee_scolaire:
+            if annee_scolaire.etablissement_id != etablissement.id:
+                raise serializers.ValidationError({
+                    'annee_scolaire': "Cette année scolaire n'appartient pas à cet établissement"
+                })
+
+        # Vérifier l'unicité (nom + établissement + année)
+        qs = Matiere.objects.filter(
             nom__iexact=nom,
-            etablissement=etablissement
-        ).exists():
-            raise serializers.ValidationError(
-                "Cette matière existe déjà dans cet établissement."
-            )
+            etablissement=etablissement,
+            annee_scolaire=annee_scolaire,
+        )
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError({
+                'nom': "Cette matière existe déjà pour cette année scolaire."
+            })
 
         return data
     
@@ -148,20 +182,51 @@ class CoursSerializer(serializers.ModelSerializer):
         return dict(Cours.TYPE_CHOICES).get(obj.type_cours, obj.type_cours)
     
     def validate(self, data):
-        # Si type_cours est 'specifique', date_specifique est obligatoire
-        if data.get('type_cours') == 'specifique' and not data.get('date_specifique'):
-            raise serializers.ValidationError(
-                "Les cours spécifiques doivent avoir une date spécifique"
-            )
-        
-        # Si date_specifique est fournie, elle doit être dans l'année scolaire
-        if data.get('date_specifique'):
-            annee_scolaire = data.get('annee_scolaire')
-            if annee_scolaire:
-                if data['date_specifique'] < annee_scolaire.date_debut or data['date_specifique'] > annee_scolaire.date_fin:
-                    raise serializers.ValidationError(
-                        "La date spécifique doit être dans l'année scolaire"
+        instance = self.instance
+        type_cours = data.get('type_cours', instance.type_cours if instance else 'regulier')
+        date_specifique = data.get('date_specifique', instance.date_specifique if instance else None)
+        annee_scolaire = data.get('annee_scolaire', instance.annee_scolaire if instance else None)
+        matiere = data.get('matiere', instance.matiere if instance else None)
+        classe = data.get('classe', instance.classe if instance else None)
+        professeur = data.get('professeur', instance.professeur if instance else None)
+
+        if type_cours == 'specifique' and not date_specifique:
+            raise serializers.ValidationError({
+                'date_specifique': "Les cours spécifiques doivent avoir une date spécifique"
+            })
+
+        if date_specifique and annee_scolaire:
+            if date_specifique < annee_scolaire.date_debut or date_specifique > annee_scolaire.date_fin:
+                raise serializers.ValidationError({
+                    'date_specifique': "La date spécifique doit être dans l'année scolaire"
+                })
+
+        if matiere and annee_scolaire and matiere.annee_scolaire_id:
+            if matiere.annee_scolaire_id != annee_scolaire.id:
+                raise serializers.ValidationError({
+                    'matiere': (
+                        f"La matière « {matiere.nom} » appartient à l'année "
+                        f"« {matiere.annee_scolaire.nom} », pas à « {annee_scolaire.nom} »"
                     )
+                })
+                
+        if classe and annee_scolaire and classe.annee_scolaire_id != annee_scolaire.id:
+            raise serializers.ValidationError({
+                'classe': (
+                    f"La classe « {classe.nom} » appartient à l'année "
+                    f"« {classe.annee_scolaire.nom} », pas à « {annee_scolaire.nom} »"
+                )
+            })
+
+        if professeur and matiere:
+            # Un prof doit enseigner cette matière (si la relation est renseignée)
+            if professeur.matieres.exists() and not professeur.matieres.filter(id=matiere.id).exists():
+                raise serializers.ValidationError({
+                    'professeur': (
+                        f"Le professeur « {professeur.user.get_full_name()} » "
+                        f"n'enseigne pas la matière « {matiere.nom} »"
+                    )
+                })
         return data
 
 class UserProfileSerializer(serializers.ModelSerializer):

@@ -133,12 +133,20 @@ class Matiere(TimeStampedModel):
         on_delete=models.CASCADE,
         related_name='matieres'
     )
+    annee_scolaire = models.ForeignKey(
+        'AnneeScolaire',
+        on_delete=models.CASCADE,
+        related_name='matieres',
+        null=True,
+        blank=True,
+        help_text="Année scolaire à laquelle cette matière appartient"
+    )
 
     def __str__(self):
         return self.nom
 
     class Meta:
-        unique_together = ('nom', 'etablissement')
+        unique_together = ('nom', 'etablissement', 'annee_scolaire')
         verbose_name = "Matière"
         verbose_name_plural = "Matières"
 
