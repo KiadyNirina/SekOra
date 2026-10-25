@@ -408,8 +408,11 @@ export const authApi = {
     }).then(() => ({ message: 'Classe supprimée' })),
 
     getMatieres: (filters = {}) => {
-        const query = new URLSearchParams(filters).toString();
-        return fetchWithAuth(`/api/matieres/?${query}`).then(response => response.json());
+        const query = new URLSearchParams();
+        if (filters.etablissement) query.append('etablissement', filters.etablissement);
+        if (filters.annee_scolaire) query.append('annee_scolaire', filters.annee_scolaire);
+        if (filters.search) query.append('search', filters.search);
+        return fetchWithAuth(`/api/matieres/?${query.toString()}`).then(r => r.json());
     },
 
     createMatiere: (data) => fetchWithAuth('/api/matieres/', {
@@ -569,6 +572,22 @@ export const authApi = {
     unpublishEvaluation: (id) => fetchWithAuth(`/api/evaluations/${id}/brouillon/`, {
         method: 'POST',
     }).then(res => res.json()),
+
+    getRecentActivity: (limit = 10) => {
+        return fetchWithAuth(`/api/dashboard/activity/?limit=${limit}`)
+            .then(response => response.json());
+    },
+
+    getActivities: (filters = {}) => {
+        const query = new URLSearchParams();
+        if (filters.type) query.append('type', filters.type);
+        if (filters.search) query.append('search', filters.search);
+        if (filters.days) query.append('days', filters.days);
+        if (filters.page) query.append('page', filters.page);
+        if (filters.page_size) query.append('page_size', filters.page_size);
+        return fetchWithAuth(`/api/activities/?${query.toString()}`)
+            .then(response => response.json());
+    },
 };
 
 export const authStore = {

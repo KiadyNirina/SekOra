@@ -38,6 +38,8 @@ import time
 from django.conf import settings
 import socket
 import urllib3.util.connection as urllib3_cn
+from datetime import timedelta
+from django.core.paginator import Paginator
 
 def _allowed_gai_family():
     return socket.AF_INET
@@ -533,20 +535,39 @@ class MatiereViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        queryset = Matiere.objects.select_related('etablissement')
+        queryset = Matiere.objects.select_related(
+            'etablissement', 'annee_scolaire'
+        ).prefetch_related(
+            'classes',
+            'classes__annee_scolaire',
+        )
 
         etablissement_id = self.request.query_params.get('etablissement')
+        annee_scolaire_id = self.request.query_params.get('annee_scolaire')
         search = self.request.query_params.get('search')
 
-        if etablissement_id:
+        # Si l'utilisateur est un établissement, restreindre à son périmètre
+        if hasattr(self.request.user, 'etablissement'):
+            queryset = queryset.filter(
+                etablissement=self.request.user.etablissement
+            )
+        elif etablissement_id:
             queryset = queryset.filter(etablissement_id=etablissement_id)
 
+        if annee_scolaire_id:
+            queryset = queryset.filter(annee_scolaire_id=annee_scolaire_id)
+
         if search:
-            queryset = queryset.filter(
-                nom__icontains=search
-            )
+            queryset = queryset.filter(nom__icontains=search)
 
         return queryset.order_by('nom')
+
+    def perform_create(self, serializer):
+        # Force l'établissement de l'utilisateur connecté
+        if hasattr(self.request.user, 'etablissement'):
+            serializer.save(etablissement=self.request.user.etablissement)
+        else:
+            serializer.save()
     
 class SalleViewSet(viewsets.ModelViewSet):
     serializer_class = SalleSerializer
@@ -1062,3 +1083,169 @@ class ImportOSMSchoolsView(APIView):
                 'success': False,
                 'message': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+            
+class ActivityListView(APIView):
+    """
+    Liste paginée et filtrable des activités de l'établissement.
+    Query params :
+      - type (str) : new_student | new_teacher | new_class | grade | payment | absence
+      - search (str) : recherche dans les noms/classes
+      - page (int) : numéro de page (défaut 1)
+      - page_size (int) : taille de page (défaut 20, max 100)
+      - days (int) : fenêtre temporelle en jours (défaut 90, max 365)
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not hasattr(request.user, 'etablissement'):
+            return Response(
+                {'error': 'Établissement requis'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        etablissement = request.user.etablissement
+
+        # --- Params ---
+        activity_type = request.query_params.get('type') or None
+        search = (request.query_params.get('search') or '').strip().lower()
+        try:
+            page_num = max(1, int(request.query_params.get('page', 1)))
+        except ValueError:
+            page_num = 1
+        try:
+            page_size = min(100, max(1, int(request.query_params.get('page_size', 20))))
+        except ValueError:
+            page_size = 20
+        try:
+            days = min(365, max(1, int(request.query_params.get('days', 90))))
+        except ValueError:
+            days = 90
+
+        since = timezone.now() - timedelta(days=days)
+        activities = []
+
+        # ---------- 1. Nouveaux élèves ----------
+        if activity_type in (None, 'new_student'):
+            qs = Eleve.objects.filter(
+                etablissement=etablissement,
+                created_at__gte=since
+            ).select_related('user', 'classe')
+
+            for eleve in qs:
+                activities.append({
+                    'type': 'new_student',
+                    'name': eleve.user.get_full_name() or eleve.user.email,
+                    'class': eleve.classe.nom if eleve.classe else 'Non assigné',
+                    'date': eleve.created_at.isoformat(),
+                    'timestamp': eleve.created_at,
+                    'link': f'/etablissement/etudiants',
+                    '_search': f"{eleve.user.get_full_name()} {eleve.user.email} {eleve.classe.nom if eleve.classe else ''}".lower(),
+                })
+
+        # ---------- 2. Nouveaux professeurs ----------
+        if activity_type in (None, 'new_teacher'):
+            qs = Professeur.objects.filter(
+                etablissement=etablissement,
+                created_at__gte=since
+            ).select_related('user')
+
+            for prof in qs:
+                activities.append({
+                    'type': 'new_teacher',
+                    'name': prof.user.get_full_name() or prof.user.email,
+                    'class': '-',
+                    'date': prof.created_at.isoformat(),
+                    'timestamp': prof.created_at,
+                    'link': f'/etablissement/professeurs',
+                    '_search': f"{prof.user.get_full_name()} {prof.user.email}".lower(),
+                })
+
+        # ---------- 3. Nouvelles classes ----------
+        if activity_type in (None, 'new_class'):
+            qs = Classe.objects.filter(
+                etablissement=etablissement,
+                created_at__gte=since
+            )
+
+            for classe in qs:
+                activities.append({
+                    'type': 'new_class',
+                    'name': classe.nom,
+                    'class': classe.niveau,
+                    'date': classe.created_at.isoformat(),
+                    'timestamp': classe.created_at,
+                    'link': f'/etablissement/classes',
+                    '_search': f"{classe.nom} {classe.niveau} {classe.section or ''}".lower(),
+                })
+
+        # ---------- 4. Évaluations publiées ----------
+        if activity_type in (None, 'grade'):
+            qs = Evaluation.objects.filter(
+                etablissement=etablissement,
+                statut='publie',
+                updated_at__gte=since
+            ).select_related('classe', 'matiere', 'professeur__user')
+
+            for ev in qs:
+                activities.append({
+                    'type': 'grade',
+                    'name': f"{ev.nom} — {ev.matiere.nom}",
+                    'class': ev.classe.nom,
+                    'date': ev.updated_at.isoformat(),
+                    'timestamp': ev.updated_at,
+                    'link': f'/etablissement/notes',
+                    '_search': f"{ev.nom} {ev.matiere.nom} {ev.classe.nom}".lower(),
+                })
+
+        # ---------- Filtre recherche ----------
+        if search:
+            activities = [a for a in activities if search in a.get('_search', '')]
+
+        # ---------- Tri global ----------
+        activities.sort(key=lambda a: a['timestamp'], reverse=True)
+
+        # ---------- Nettoyage + formatage date ----------
+        for act in activities:
+            act['time'] = self._format_relative_time(act['timestamp'])
+            act.pop('timestamp', None)
+            act.pop('_search', None)
+
+        # ---------- Pagination ----------
+        total = len(activities)
+        start = (page_num - 1) * page_size
+        end = start + page_size
+        page_items = activities[start:end]
+
+        # ---------- Compteurs par type (sur la fenêtre) ----------
+        counts_by_type = {'new_student': 0, 'new_teacher': 0, 'new_class': 0, 'grade': 0}
+        for a in activities:
+            if a['type'] in counts_by_type:
+                counts_by_type[a['type']] += 1
+
+        return Response({
+            'count': total,
+            'page': page_num,
+            'page_size': page_size,
+            'total_pages': max(1, (total + page_size - 1) // page_size),
+            'results': page_items,
+            'counts_by_type': counts_by_type,
+        })
+
+    @staticmethod
+    def _format_relative_time(dt):
+        now = timezone.now()
+        diff = now - dt
+        seconds = diff.total_seconds()
+
+        if seconds < 60:
+            return "à l'instant"
+        elif seconds < 3600:
+            return f"il y a {int(seconds // 60)} min"
+        elif seconds < 86400:
+            return f"il y a {int(seconds // 3600)} h"
+        elif seconds < 604800:
+            return f"il y a {int(seconds // 86400)} j"
+        else:
+            return dt.strftime('%d/%m/%Y à %H:%M')

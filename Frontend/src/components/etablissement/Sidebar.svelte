@@ -10,9 +10,9 @@
   const navigation = [
     { name: 'Tableau de bord', icon: 'heroicons:home', href: '/etablissement/dashboard' },
     { name: 'Années scolaires', icon: 'heroicons:calendar-days', href: '/etablissement/annees-scolaires' },
-    { name: 'Étudiants', icon: 'heroicons:user-group', href: '/etablissement/etudiants' },
-    { name: 'Classes', icon: 'heroicons:academic-cap', href: '/etablissement/classes', badge: 'new' },
     { name: 'Matières', icon: 'heroicons:book-open', href: '/etablissement/matieres' },
+    { name: 'Classes', icon: 'heroicons:academic-cap', href: '/etablissement/classes', badge: 'new' },
+    { name: 'Étudiants', icon: 'heroicons:user-group', href: '/etablissement/etudiants' },
     { name: 'Professeurs', icon: 'heroicons:academic-cap', href: '/etablissement/professeurs' },
     { name: 'Cours & Emploi du temps', icon: 'heroicons:calendar', href: '/etablissement/cours' },
     { name: 'Notes & Évaluations', icon: 'mdi:clipboard-list-outline', href: '/etablissement/notes' },
@@ -20,6 +20,7 @@
     { name: 'Communication', icon: 'heroicons:chat-bubble-left-right', href: '/etablissement/communication' },
     { name: 'Finances', icon: 'heroicons:currency-dollar', href: '/etablissement/finances' },
     { name: 'Documents', icon: 'heroicons:folder', href: '/etablissement/documents' },
+    { name: 'Activités', icon: 'heroicons:clock', href: '/etablissement/activites' },
     { name: 'Paramètres', icon: 'heroicons:cog', href: '/etablissement/parametres' }
   ];
 </script>
